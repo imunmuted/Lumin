@@ -19,6 +19,7 @@ import { state, saveStateToFile }    from '../../managers/BotManager.js';
 import { memorySystem }               from '../../memory/MemorySystem.js';
 import * as db                        from '../../database/index.js';
 import { Logger }                     from '../../core/Logger.js';
+import { SYSTEM_AGENT_CALLSIGN }      from '../../modules/config.js';
 
 const logger = Logger.get('BirthdayHandler');
 
@@ -443,7 +444,7 @@ async function showBirthdaySetup(interaction, isUpdate = false) {
     container.addTextDisplayComponents(
       new TextDisplayBuilder().setContent(
         '**Birthday Setup**\n' +
-        "Add a birthday so Lumin can send a celebration message on the day.\n\n" +
+        `Add a birthday so ${SYSTEM_AGENT_CALLSIGN} can send a celebration message on the day.\n\n` +
         `**Birthdays set:** ${userBirthdays}/${MAX_BIRTHDAYS_PER_USER}\n\n` +
         'Select the birth month to get started:'
       )

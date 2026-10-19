@@ -1,0 +1,35 @@
+name: Helium CI Pipeline
+
+on:
+  push:
+    branches: [live, main, revamp-2026]
+  pull_request:
+    branches: [live, main, revamp-2026]
+
+jobs:
+  validate:
+    name: Lint, Test & Validate Invariants
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [24.x]
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Execute Vitest Suites
+        run: npm run test
+
+      - name: Security Audit
+        run: npm audit --audit-level=high || true

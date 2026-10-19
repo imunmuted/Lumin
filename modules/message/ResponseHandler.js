@@ -698,6 +698,22 @@ export async function handleModelResponse(
 
         // ── Apply final format ───────────────────────────────────────────
         if (botMessage) {
+          // If in Normal mode and grounding metadata exists, format clickable markdown sources
+          if (responseFormat !== 'Embedded' && groundingMetadata?.groundingChunks?.length) {
+            const validChunks = groundingMetadata.groundingChunks
+              .filter(c => c.web?.uri)
+              .slice(0, 3);
+            if (validChunks.length > 0) {
+              const sourceLinks = validChunks
+                .map((c, i) => `[${i + 1}] [${c.web.title || 'Source'}](${c.web.uri})`)
+                .join(' • ');
+              const footer = `\n\n*Sources: ${sourceLinks}*`;
+              if (finalResponse.length + footer.length <= CHARACTER_LIMITS.DISCORD_MAX) {
+                finalResponse += footer;
+              }
+            }
+          }
+
           if (!isLargeRef.value && responseFormat === 'Embedded') {
             updateEmbed(botMessage, finalResponse, originalMessage, groundingMetadata, urlContextMetadata, effectiveSettings);
           } else if (!isLargeRef.value && !wasShortResponse) {
@@ -873,5 +889,9 @@ export async function handleModelResponse(
     clearPendingSticker(historyId);
     clearPendingGif(historyId);
     cleanup();
+    tempResponse = '';
+    groundingMetadata = null;
+    urlContextMetadata = null;
+    botMessage = null;
   }
 }

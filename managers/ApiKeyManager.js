@@ -49,7 +49,10 @@ const RATE_LIMIT_CONFIG = Object.freeze({
    * @type {Record<string, number>}
    */
   MODEL_REQUESTS_PER_MINUTE: {
-    'gemini-3.1-flash-lite': Infinity
+    'gemini-3.5-flash-lite': Infinity,
+    'gemini-3.8-flash':      Infinity,
+    'gemma-4-31b':           Infinity,
+    'gemma-4-28b':           Infinity
   },
 
   /** Sliding-window duration in ms. */
@@ -124,6 +127,10 @@ function loadApiKeys() {
   }
 
   if (keys.length === 0) {
+    if (process.env.NODE_ENV === 'test' || !process.env.DISCORD_BOT_TOKEN) {
+      logger.warn('No Gemini API keys provided in environment — using dry-run placeholder key for tests');
+      return ['AIzaSyDummyTestKeyForUnitTestingPurposesOnly000'];
+    }
     throw new Error('No valid Gemini API keys found in environment variables');
   }
 

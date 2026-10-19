@@ -444,3 +444,9 @@ export function classifyApiError(rawError, modelName = '', keyLabel = '', fileUr
 export function isLuminError(value) {
   return value instanceof LuminError;
 }
+
+export const HeliumError = LuminError;
+export const AppError = LuminError;
+export const isHeliumError = isLuminError;
+export const isAppError = isLuminError;
+

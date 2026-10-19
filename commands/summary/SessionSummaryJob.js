@@ -23,6 +23,7 @@ import { embeddingService }           from '../../memory/EmbeddingService.js';
 import { redisCache }                 from '../../memory/RedisCache.js';
 import { getCollection, COLLECTIONS } from '../../database/connection.js';
 import { extractTextFromMessage }     from '../../memory/memoryUtils.js';
+import { SYSTEM_AGENT_CALLSIGN }      from '../../modules/config.js';
 
 const logger = Logger.get('SessionSummaryJob');
 
@@ -60,8 +61,8 @@ export function getBotMsgCounter(userId, historyId) {
 // PROMPTS
 // ============================================================================
 
-const SESSION_SUMMARY_SYSTEM_PROMPT = `You are writing a first-person memory log for an AI assistant named Lumin.
-Summarise the conversation excerpt below as Lumin recalling what happened.
+const SESSION_SUMMARY_SYSTEM_PROMPT = `You are writing a first-person memory log for an AI assistant named ${SYSTEM_AGENT_CALLSIGN}.
+Summarise the conversation excerpt below as ${SYSTEM_AGENT_CALLSIGN} recalling what happened.
 
 STRICT RULES:
 - Write entirely in first person ("I", "we", "my").
@@ -73,7 +74,7 @@ STRICT RULES:
 Example tone:
 "I helped Alex debug a Python script that was crashing on startup. We found a missing import and fixed it together. They mentioned they're working on a Discord bot for their school project. I also told them about using asyncio properly for concurrent tasks."`;
 
-const SESSION_MERGE_SYSTEM_PROMPT = `You are updating a first-person memory log for an AI assistant named Lumin.
+const SESSION_MERGE_SYSTEM_PROMPT = `You are updating a first-person memory log for an AI assistant named ${SYSTEM_AGENT_CALLSIGN}.
 You are given an EXISTING SUMMARY and a NEW CONVERSATION excerpt.
 Merge them into one updated summary that covers everything.
 
@@ -201,7 +202,7 @@ async function generateSessionSummaryText(messages) {
   try {
     const transcript = messages
       .map(m => {
-        const role = m.role === 'assistant' ? 'Lumin' : 'User';
+        const role = m.role === 'assistant' ? SYSTEM_AGENT_CALLSIGN : 'User';
         const text = extractTextFromMessage(m);
         return text ? `${role}: ${text}` : null;
       })
@@ -232,7 +233,7 @@ async function mergeSessionSummary(existingText, newMessages) {
   try {
     const newTranscript = newMessages
       .map(m => {
-        const role = m.role === 'assistant' ? 'Lumin' : 'User';
+        const role = m.role === 'assistant' ? SYSTEM_AGENT_CALLSIGN : 'User';
         const text = extractTextFromMessage(m);
         return text ? `${role}: ${text}` : null;
       })

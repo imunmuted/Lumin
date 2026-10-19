@@ -30,7 +30,7 @@ const logger = Logger.get('RedisCache');
 // RAG query results TTL mirrors the in-memory cache (MEMORY_CACHE_TTL_MS = 2 min).
 const REDIS_TTL_SECONDS = Math.floor(MEMORY_CACHE_TTL_MS / 1000);
 // Separate key prefix from embedding keys so namespaces never collide.
-const KEY_PREFIX = 'lumin:rag:';
+const KEY_PREFIX = 'helium:rag:';
 
 // ============================================================================
 // REDIS CLIENT
@@ -53,6 +53,11 @@ class RedisCache {
    */
   async connect() {
     if (this._client) return;
+
+    if (process.env.ENABLE_REDIS !== 'true') {
+      logger.info('ENABLE_REDIS is false — Redis cache bypassed, running ultra-fast W-TinyLFU memory cache');
+      return;
+    }
 
     const url = process.env.REDIS_URL;
     if (!url) {

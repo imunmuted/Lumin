@@ -14,6 +14,7 @@ import { state, TEMP_DIR, BOT_CONFIG } from '../../managers/BotManager.js';
 import * as db    from '../../database.js';
 import { Logger } from '../../core/Logger.js';
 import { Embeds } from '../shared/embedBuilder.js';
+import { PERSONALIZATION_DEFAULT } from '../config.js';
 
 import {
   showUserSettings,
@@ -67,13 +68,18 @@ export async function handleUserToggleContinuousReply(interaction) {
   await showUserSettingsPage2(interaction, true);
 }
 
-export async function handleUserToggleCrossContext(interaction) {
+export async function handleUserTogglePersonalization(interaction) {
   const userId = interaction.user.id;
   if (!state.userSettings[userId]) state.userSettings[userId] = {};
-  state.userSettings[userId].crossContextEnabled = !(state.userSettings[userId].crossContextEnabled ?? false);
+  const current = state.userSettings[userId].personalization ?? state.userSettings[userId].crossContextEnabled ?? PERSONALIZATION_DEFAULT;
+  const next = !current;
+  state.userSettings[userId].personalization = next;
+  state.userSettings[userId].crossContextEnabled = next;
   await persistUser(userId);
   await showUserSettingsPage2(interaction, true);
 }
+
+export const handleUserToggleCrossContext = handleUserTogglePersonalization;
 
 // ============================================================================
 // MODAL SUBMIT HANDLERS

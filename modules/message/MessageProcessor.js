@@ -30,7 +30,7 @@ import {
 import { typingManager, handleModelResponse } from './ResponseHandler.js';
 import { prepareMessageContent, extractFileText } from './PromptBuilder.js';
 import { processPromptAndMediaAttachments, isSupportedAttachment, classifyAttachments } from './MediaHandler.js';
-import config from '../../config.js';
+import config, { SYSTEM_AGENT_CALLSIGN } from '../../config.js';
 import { functionTools } from '../functions/FunctionRegistry.js';
 
 const logger = Logger.get('MessageProcessor');
@@ -260,29 +260,31 @@ async function buildSystemInstruction(message, effectiveSettings, serverSettings
     } catch { /* non-fatal */ }
   }
 
-  // ── Cross-context status ────────────────────────────────────────────────
-  // Tell the AI whether cross-context memory is active so it can surface it
-  // in conversation when relevant (e.g. "I remember you mentioned this in DMs").
+  // ── Temporal Anchor Vector & Circadian Biological Rhythm ──────────────
+  const now = new Date();
+  const utcHour = now.getUTCHours();
+  const utcMinute = now.getUTCMinutes();
+  const isLateNightCircadianZone = utcHour >= 0 && utcHour <= 4; // 12am–4am UTC
+
+  instructions += `\n\n## Temporal Anchor & Circadian State\n` +
+    `- Current UTC Timestamp: ${now.toISOString()}\n` +
+    `- Current Clock: ${String(utcHour).padStart(2, '0')}:${String(utcMinute).padStart(2, '0')} UTC\n` +
+    (isLateNightCircadianZone
+      ? `- Circadian Phase: LATE NIGHT (00:00–04:00 UTC). Psychological armor is slightly lowered, tone slightly more candid, quiet, and reflective.\n`
+      : `- Circadian Phase: ACTIVE DAYLIGHT. Grounded, alert, dependable, and capable.\n`);
+
+  // ── Unified Cognitive Memory / Personalization Status ──────────────────
   const userId2 = message.author.id;
-  const crossContextOn = state.userSettings?.[userId2]?.crossContextEnabled ?? false;
-  if (guildId) {
-    if (crossContextOn) {
-      instructions += `\n\n## Cross-Context Memory: ENABLED\n` +
-        `You have access to this user's memories from their DMs with you AND from other servers they share with you. ` +
-        `When relevant, you may recall information across these contexts (e.g. "I remember you mentioned X in our DMs"). ` +
-        `Label the source subtly so the user knows why you remembered it.`;
-    } else {
-      instructions += `\n\n## Cross-Context Memory: DISABLED\n` +
-        `Memory retrieval is limited to this server's conversation history only. ` +
-        `Do NOT reference facts from this user's DMs or other servers.`;
-    }
+  const userSetting = state.userSettings?.[userId2];
+  const personalizationOn = userSetting?.personalization ?? userSetting?.crossContextEnabled ?? true;
+
+  if (personalizationOn) {
+    instructions += `\n\n## Unified Cognitive Memory: ACTIVE (Personalization Enabled)\n` +
+      `You maintain a unified cognitive memory model of this user across all their DMs and shared servers. ` +
+      `Recall personal facts, shared interests, and preferences universally, while respecting appropriate social boundaries.`;
   } else {
-    // DM context — cross-context means server memories bleed into DMs
-    if (crossContextOn) {
-      instructions += `\n\n## Cross-Context Memory: ENABLED\n` +
-        `You have access to this user's memories from servers they are in with you, in addition to these DMs. ` +
-        `When relevant, you may recall information across contexts.`;
-    }
+    instructions += `\n\n## Unified Cognitive Memory: SCOPED (Personalization Disabled)\n` +
+      `Memory retrieval is strictly partitioned to this channel and server conversation history only.`;
   }
 
   // ── Session summary injection (latest session context — zero RAG cost) ─────
@@ -389,7 +391,7 @@ export async function handleTextMessage(message) {
     const resetTime = new Date(limitCheck.resetAt).toUTCString();
     await message.reply({
       embeds: [Embeds.error('Daily Limit Reached',
-        `Lumin has reached the 500 message/day limit for today.\nResets at: **${resetTime}**`
+        `${SYSTEM_AGENT_CALLSIGN} has reached the daily message limit for today.\nResets at: **${resetTime}**`
       )]
     }).catch(() => {});
     return;

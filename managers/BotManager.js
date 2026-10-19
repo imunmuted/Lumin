@@ -28,6 +28,20 @@ import { fileURLToPath } from 'url';
 import * as db from '../database.js';
 import { Logger } from '../core/Logger.js';
 import { memorySystem } from '../memory/MemorySystem.js';
+import { memoryCache } from '../memory/MemoryCache.js';
+import { telemetryWatchdog } from '../core/TelemetryWatchdogDaemon.js';
+
+// Disable libvips internal memory buffer caching to prevent memory leaks on 512MB RAM ceiling
+try {
+  const sharpModule = await import('sharp');
+  const sharp = sharpModule.default || sharpModule;
+  if (sharp?.cache) {
+    sharp.cache(false);
+    sharp.concurrency(1);
+  }
+} catch {
+  // sharp may not be needed or mock in test mode
+}
 
 import {
   withRetryPerModel,
@@ -125,39 +139,48 @@ export const client = new Client({
   makeCache: Options.cacheWithLimits({
     ...Options.DefaultMakeCacheSettings,
 
-    // Messages — default 200/channel; 50 is plenty for a chat bot
-    MessageManager: 50,
+    // Messages — micro-cache for 512MB RAM ceiling; 10 recent messages per channel
+    MessageManager: 10,
 
-    // Members — default: all; cap per-guild to avoid OOM in large servers.
-    // keepOverLimit ensures the bot's own member entry is never evicted.
+    // Members — cap per-guild to 50 to avoid OOM in large servers (10k user scale)
     GuildMemberManager: {
-      maxSize: 100,
+      maxSize: 50,
       keepOverLimit: member => member.id === member.client.user?.id
     },
 
-    // Presences are never used by Lumin — zero them out entirely
+    // Users — cap global user cache to 100 entries
+    UserManager: 100,
+
+    // Threads — limit cached threads
+    ThreadManager: 10,
+
+    // Presences are never used — zero them out entirely
     PresenceManager: 0,
 
-    // Reactions — small cache for recent reactions; 0 would prevent react operations
-    ReactionManager: 10,
+    // Reactions — minimal cache for recent reaction actions
+    ReactionManager: 5,
 
     // Stage instances not used — zero out
     StageInstanceManager: 0,
   }),
 
-  // ── Sweepers: periodically evict stale cached objects ─────────────────────
+  // ── Sweepers: periodically evict stale cached objects every 300s (5 min) ──
   sweepers: {
     messages: {
-      interval: 3600,    // run sweep every hour (seconds)
-      lifetime: 1800     // evict messages older than 30 min
+      interval: 300,    // sweep every 5 minutes
+      lifetime: 900     // evict messages older than 15 min
     },
     users: {
-      interval: 3600,
+      interval: 300,
       filter: () => user => !user.bot
     },
     guildMembers: {
-      interval: 3600,
+      interval: 300,
       filter: () => member => member.id !== member.client.user?.id
+    },
+    threads: {
+      interval: 300,
+      lifetime: 900
     }
   }
 });
@@ -332,7 +355,14 @@ export async function initialize() {
   await memorySystem.init();
   logger.info('Memory system initialized');
 
-  // 3. Migrations (background — never block startup)
+  // 3b. Telemetry & Watchdog Daemon (Render Free Tier 512MB RAM ceiling guardian)
+  telemetryWatchdog.registerEmergencyEvictionHook(() => {
+    memoryCache.pruneColdEntries();
+  });
+  telemetryWatchdog.start();
+  logger.info('Telemetry Watchdog Daemon started');
+
+  // 3c. Migrations (background — never block startup)
   if (MIGRATION_CONFIG.ENABLE_MIGRATION) {
     runMigrations().catch(err =>
       logger.warn(`Migration failed (non-critical): ${err.message}`)
@@ -386,6 +416,8 @@ async function gracefulShutdown(signal) {
   logger.info(`Received ${signal} — performing graceful shutdown…`);
 
   try {
+    telemetryWatchdog.stop();
+
     logger.info('Saving final state…');
     await saveStateToFile();
     logger.info('State saved');

@@ -12,8 +12,11 @@ export const BOT_CONFIG = Object.freeze({
 // ENABLE_GEMMA = true routes all standard chat through Gemma globally.
 // /search and /summary always use Gemini regardless — they need incompatible tools.
 
+import { SYSTEM_AGENT_CALLSIGN } from '../config.js';
+export { SYSTEM_AGENT_CALLSIGN };
+
 export const ENABLE_GEMMA            = true;
-export const GEMMA_DEFAULT_MODEL     = 'gemma-4-26b';  // key in MODELS map
+export const GEMMA_DEFAULT_MODEL     = 'gemma-4-28b';  // key in MODELS map
 export const GEMMA_FALLBACK_MODEL    = 'gemma-4-31b';  // key in MODELS map, used when CYCLE_GEMMA_WITH_GEMINI=true
 export const CYCLE_GEMMA_WITH_GEMINI = false;          // true = append Gemma to fallback chain after all Gemini keys exhaust
 
@@ -27,70 +30,107 @@ export const ENABLE_RAG = false;
 
 // ── MODELS ───────────────────────────────────────────────────────────────────
 
-export const DEFAULT_MODEL = 'gemini-3.1-flash-lite';
+export const DEFAULT_MODEL = 'gemini-3.5-flash-lite';
 
-export const MODELS = {
-  // ── Gemini 3 series ────────────────────────────────────────────────────────
-  'gemini-3.1-pro':        'gemini-3.1-pro-preview',      // most capable, agentic
-  'gemini-3.1-flash-lite': 'gemini-3.1-flash-lite', // fastest / cheapest Gemini 3
-  'gemini-3-flash':        'gemini-3-flash-preview',      // frontier-class, fraction of cost
-  'gemini-3.5-flash':      'gemini-3.5-flash',            // speed + quality balance
+export const MODELS = Object.freeze({
+  // ── Gemini 3 series (strictly 2 models) ────────────────────────────────────
+  'gemini-3.8-flash':      'gemini-3.8-flash-preview',      // flagship reasoning & search grounding
+  'gemini-3.5-flash-lite': 'gemini-3.5-flash-lite',         // high-throughput, low latency, micro-cost
 
-  // ── Gemini 2.5 series ──────────────────────────────────────────────────────
-  'gemini-2.5-pro':        'gemini-2.5-pro',              // best reasoning + coding
+  // ── Gemma 4 series (strictly 2 models) ────────────────────────────────────
+  'gemma-4-31b':           'gemma-4-31b-it',                // dense 31B instruction-tuned
+  'gemma-4-28b':           'gemma-4-26b-a4b-it',            // 28B/26B MoE active params
+  'gemma-4-26b':           'gemma-4-26b-a4b-it',            // alias for backwards compatibility
+});
 
-  // ── Gemma 4 (confirmed on Gemini API) ─────────────────────────────────────
-  'gemma-4-26b':           'gemma-4-26b-a4b-it',   // MoE 26B active params
-  'gemma-4-31b':           'gemma-4-31b-it',        // Dense 31B
+export const GEMINI_3_MODELS = Object.freeze([
+  'gemini-3.8-flash-preview',
+  'gemini-3.8-flash',
+  'gemini-3.5-flash-lite',
+]);
 
-  // ── Gemma 3 (confirmed on Gemini API via AI Studio) ────────────────────────
-  'gemma-3-27b':           'gemma-3-27b-it',
-  'gemma-3-12b':           'gemma-3-12b-it',
-  'gemma-3-4b':            'gemma-3-4b-it',
-  'gemma-3-2b':            'gemma-3-2b-it',
-  'gemma-3-1b':            'gemma-3-1b-it',
-};
-
-export const GEMINI_3_MODELS = [
-  'gemini-3.1-pro-preview',
-  'gemini-3.1-flash-lite',
-  'gemini-3-flash-preview',
-];
-
-export const GEMMA_MODELS = [
-  // Gemma 4 (confirmed on Gemini API)
-  'gemma-4-26b-a4b-it',
+export const GEMMA_MODELS = Object.freeze([
   'gemma-4-31b-it',
-  // Gemma 3 (confirmed on Gemini API / AI Studio)
-  'gemma-3-27b-it',
-  'gemma-3-12b-it',
-  'gemma-3-4b-it',
-  'gemma-3-2b-it',
-  'gemma-3-1b-it',
-];
+  'gemma-4-31b',
+  'gemma-4-26b-a4b-it',
+  'gemma-4-28b-it',
+  'gemma-4-28b',
+  'gemma-4-26b',
+]);
 
 export const GEMMA_DAILY_LIMIT_PER_KEY     = 1500;
 export const GEMMA_SUPPORTED_MIME_PREFIXES = ['image/'];
 export const GEMMA_SUPPORTED_EXTENSIONS    = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp', '.tiff'];
 
 export function isGemmaModel(modelName) {
+  if (!modelName) return false;
   return GEMMA_MODELS.includes(modelName) || /gemma/i.test(modelName);
+}
+
+// ── MODEL CAPABILITIES & GROUNDING RULES ──────────────────────────────────────
+export const MODEL_CAPABILITIES = Object.freeze({
+  'gemini-3.8-flash-preview': {
+    supportsGoogleSearch: true,
+    supportsFunctionDeclarations: true,
+    multimodal: true,
+    provider: 'gemini'
+  },
+  'gemini-3.5-flash-lite': {
+    supportsGoogleSearch: true,
+    supportsFunctionDeclarations: true,
+    multimodal: true,
+    provider: 'gemini'
+  },
+  'gemma-4-31b-it': {
+    supportsGoogleSearch: false,
+    supportsFunctionDeclarations: true,
+    multimodal: true,
+    provider: 'gemma'
+  },
+  'gemma-4-26b-a4b-it': {
+    supportsGoogleSearch: false,
+    supportsFunctionDeclarations: true,
+    multimodal: true,
+    provider: 'gemma'
+  },
+  'gemma-4-28b-it': {
+    supportsGoogleSearch: false,
+    supportsFunctionDeclarations: true,
+    multimodal: true,
+    provider: 'gemma'
+  }
+});
+
+/**
+ * Checks whether a model natively supports Google Search Grounding.
+ * Gemini 3 models support server-side googleSearch tools; Gemma models strictly
+ * require custom function declarations.
+ *
+ * @param {string} modelName
+ * @returns {boolean}
+ */
+export function doesModelSupportGoogleSearch(modelName) {
+  const resolved = MODELS[modelName] || modelName;
+  const cap = MODEL_CAPABILITIES[resolved];
+  if (cap) return cap.supportsGoogleSearch;
+  return !isGemmaModel(modelName);
 }
 
 // ── MODEL FALLBACK & RATE LIMITS ─────────────────────────────────────────────
 
 // Models tried in order when rate limits are hit.
 export const MODEL_FALLBACK_CHAIN = [
-  'gemini-3.1-flash-lite',
-  'gemini-3.5-flash'
+  'gemini-3.5-flash-lite',
+  'gemini-3.8-flash'
 ];
 
 // After this many successful calls on a model, proactively rotate to the next.
-export const MODEL_CALL_THRESHOLDS = {
-  'gemini-3.1-flash-lite': 500
-};
+export const MODEL_CALL_THRESHOLDS = Object.freeze({
+  'gemini-3.5-flash-lite': 500,
+  'gemini-3.8-flash':      200
+});
 
-export const RATE_LIMIT_ERRORS = [429, 'RESOURCE_EXHAUSTED', 'RATE_LIMIT_EXCEEDED', 'QUOTA_EXCEEDED'];
+export const RATE_LIMIT_ERRORS = Object.freeze([429, 'RESOURCE_EXHAUSTED', 'RATE_LIMIT_EXCEEDED', 'QUOTA_EXCEEDED']);
 
 // ── GENERATION CONFIG ────────────────────────────────────────────────────────
 
@@ -149,9 +189,12 @@ export const RAM_MEDIA_SUSPEND_THRESHOLD_MB = 380;   // suspend all media above 
 export const KEY_SWITCH_HOLD_MS             = 1500;  // ms to wait after rotating API key
 export const MAX_QUEUE_DEPTH_PER_USER       = 5;     // messages beyond this are dropped with a warning
 export const PDF_ENABLED_FOR_GEMINI         = false; // disabled to save RAM and quota
-export const CACHE_ENABLED                  = false; // Redis L3 cache; in-memory L1/L2 always on
+export const ENABLE_REDIS                   = process.env.ENABLE_REDIS === 'true';
+export const CACHE_ENABLED                  = ENABLE_REDIS; // Redis L3 cache; off by default, W-TinyLFU L1/L2 memory cache handles load
+export const FAST_MEMORY_CACHE_MAX_BYTES    = 25 * 1024 * 1024; // 25MB heap ceiling for W-TinyLFU in-memory cache
+export const PERSONALIZATION_DEFAULT        = true; // single unified cognitive memory toggle
 export const WEEKLY_SUMMARY_ENABLED         = true;  // set false to skip weekly context summary job entirely
-export const CROSS_CONTEXT_ENABLED          = false; // global default; overridden per-user via userSettings
+export const CROSS_CONTEXT_ENABLED          = true; // global default; unified per-user across DMs and channels
 
 // ── MEDIA PROCESSING ─────────────────────────────────────────────────────────
 // Individual toggles — set false to reject that media type before it hits the AI.
@@ -273,7 +316,7 @@ export const EMBEDDING_DIM              = 768;
 export const EMBEDDING_MRL_SHORT_DIM    = 256;  // truncated dim for fast centroid search
 export const EMBEDDING_MRL_CENTROID_DIM = 64;   // truncated dim for K-means first pass
 export const EMBEDDING_REDIS_TTL        = 24 * 60 * 60; // 24h; embeddings are deterministic
-export const EMBEDDING_REDIS_PREFIX     = 'lumin:emb:';
+export const EMBEDDING_REDIS_PREFIX     = 'helium:emb:';
 
 // PDF/video/audio embedding disabled — not needed and saves quota
 export const EMBEDDING_ENABLE_PDF   = false;
@@ -317,16 +360,19 @@ export const MESSAGE_FETCH_CONFIG = Object.freeze({
 
 export default {
   BOT_CONFIG,
+  SYSTEM_AGENT_CALLSIGN,
   ENABLE_GEMMA, GEMMA_DEFAULT_MODEL, GEMMA_FALLBACK_MODEL, CYCLE_GEMMA_WITH_GEMINI,
   ENABLE_RAG,
   DEFAULT_MODEL, MODELS, GEMINI_3_MODELS, GEMMA_MODELS,
   GEMMA_DAILY_LIMIT_PER_KEY, GEMMA_SUPPORTED_MIME_PREFIXES, GEMMA_SUPPORTED_EXTENSIONS,
   isGemmaModel,
+  MODEL_CAPABILITIES, doesModelSupportGoogleSearch,
   MODEL_FALLBACK_CHAIN, MODEL_CALL_THRESHOLDS, RATE_LIMIT_ERRORS,
   getGenerationConfig, generationConfig,
   safetySettings,
   RAM_MEDIA_SUSPEND_THRESHOLD_MB, KEY_SWITCH_HOLD_MS, MAX_QUEUE_DEPTH_PER_USER,
-  PDF_ENABLED_FOR_GEMINI, CACHE_ENABLED, WEEKLY_SUMMARY_ENABLED,
+  PDF_ENABLED_FOR_GEMINI, ENABLE_REDIS, CACHE_ENABLED, FAST_MEMORY_CACHE_MAX_BYTES,
+  PERSONALIZATION_DEFAULT, WEEKLY_SUMMARY_ENABLED, CROSS_CONTEXT_ENABLED,
   ENABLE_IMAGE_PROCESSING, ENABLE_VIDEO_PROCESSING, ENABLE_AUDIO_PROCESSING,
   ENABLE_FILE_PROCESSING, ENABLE_WEB_SEARCH, ENABLE_FUNCTION_CALLING,
   STATE_CONFIG, RESOURCE_CONFIG, MIGRATION_CONFIG, POLL_CONFIG,

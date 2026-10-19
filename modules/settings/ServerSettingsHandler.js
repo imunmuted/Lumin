@@ -22,6 +22,7 @@ import {
 } from '../../managers/BotManager.js';
 import * as db    from '../../database.js';
 import { Logger } from '../../core/Logger.js';
+import { SYSTEM_AGENT_CALLSIGN } from '../config.js';
 
 const logger = Logger.get('ServerSettings');
 
@@ -191,7 +192,7 @@ export async function showServerSettings(interaction, isUpdate = false) {
       {
         text: `**Server Settings** — Page 1 of ${TOTAL_SERVER_PAGES}\n\n` +
               '**Response Format**\n' +
-              'Controls how Lumin sends replies server-wide. Normal is plain text; Embedded uses rich cards.',
+              `Controls how ${SYSTEM_AGENT_CALLSIGN} sends replies server-wide. Normal is plain text; Embedded uses rich cards.`,
         row: new ActionRowBuilder().addComponents(...formatBtns(responseFormat))
       },
       {
@@ -235,7 +236,7 @@ export async function showServerSettingsPage2(interaction, isUpdate = false) {
       },
       {
         text: '**Continuous Reply**\n' +
-              'When enabled, Lumin responds to consecutive messages without requiring a mention each time.',
+              `When enabled, ${SYSTEM_AGENT_CALLSIGN} responds to consecutive messages without requiring a mention each time.`,
         row: new ActionRowBuilder().addComponents(toggleBtn('server_toggle_continuous', continuousReply))
       },
       {
@@ -273,7 +274,7 @@ export async function showServerSettingsPage3(interaction, isUpdate = false) {
       {
         text: `**Server Settings** — Page 3 of ${TOTAL_SERVER_PAGES}\n\n` +
               '**Embed Color**\n' +
-              `Set a server-wide accent color for Lumin's embeds. Current: \`${embedColor}\``,
+              `Set a server-wide accent color for ${SYSTEM_AGENT_CALLSIGN}'s embeds. Current: \`${embedColor}\``,
         row: new ActionRowBuilder().addComponents(
           new ButtonBuilder()
             .setCustomId('server_embed_color')
@@ -283,7 +284,7 @@ export async function showServerSettingsPage3(interaction, isUpdate = false) {
       },
       {
         text: '**Custom Personality**\n' +
-              `Define a custom server-wide persona for Lumin. Status: \`${hasPersonality ? 'Active' : 'Default'}\``,
+              `Define a custom server-wide persona for ${SYSTEM_AGENT_CALLSIGN}. Status: \`${hasPersonality ? 'Active' : 'Default'}\``,
         row: new ActionRowBuilder().addComponents(
           new ButtonBuilder()
             .setCustomId('server_custom_personality')
@@ -330,7 +331,7 @@ export async function showServerSettingsPage4(interaction, isUpdate = false) {
       {
         text: `**Server Settings** — Page 4 of ${TOTAL_SERVER_PAGES}\n\n` +
               '**Allowed Channels**\n' +
-              `Restrict Lumin to specific channels. Current scope: ${channelList}`,
+              `Restrict ${SYSTEM_AGENT_CALLSIGN} to specific channels. Current scope: ${channelList}`,
         row: new ActionRowBuilder().addComponents(
           new ButtonBuilder()
             .setCustomId('manage_allowed_channels')
@@ -449,7 +450,7 @@ export async function showChannelManagementMenu(interaction, isUpdate = false) {
     .addTextDisplayComponents(
       new TextDisplayBuilder().setContent(
         '**Channel Management**\n\n' +
-        'Select which channels Lumin is permitted to respond in. ' +
+        `Select which channels ${SYSTEM_AGENT_CALLSIGN} is permitted to respond in. ` +
         'Leave empty to allow all channels.\n\n' +
         `**Current Scope:** ${currentValue}`
       )
@@ -718,7 +719,7 @@ export async function showServerPersonalityModal(interaction) {
 
   const input = new TextInputBuilder()
     .setCustomId('personality_input')
-    .setLabel("Define Lumin's server personality")
+    .setLabel(`Define ${SYSTEM_AGENT_CALLSIGN}'s server personality`)
     .setStyle(TextInputStyle.Paragraph)
     .setPlaceholder('Enter server custom personality instructions...')
     .setMinLength(10).setMaxLength(4000);

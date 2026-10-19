@@ -15,6 +15,7 @@ import {
 import { state }  from '../../managers/BotManager.js';
 import * as db    from '../../database/index.js';
 import { Logger } from '../../core/Logger.js';
+import { SYSTEM_AGENT_CALLSIGN } from '../../modules/config.js';
 
 const logger = Logger.get('AnniversaryHandler');
 
@@ -271,7 +272,7 @@ export async function handleAnniversaryCommand(interaction) {
       );
     }
 
-    // — Section 6: Lumin — All-Time Conversation Stats ——
+    // — Section 6: Agent — All-Time Conversation Stats ——
     const firstActivityLine = firstMessageTs !== Infinity
       ? `\n> 🏁 **First Message** — ${ts(new Date(firstMessageTs))}`
       : '';
@@ -286,11 +287,11 @@ export async function handleAnniversaryCommand(interaction) {
       : '';
 
     addSection(container,
-      `**💬 Lumin — Conversation History**\n\n` +
+      `**💬 ${SYSTEM_AGENT_CALLSIGN} — Conversation History**\n\n` +
       `> 📅 **Joined** — ${ts(joinDate)}\n` +
       `> ⏳ **Time Together** — ${timeDisplay}  (\`${daysSince}\` days)\n` +
       `> 📨 **User Messages** — \`${userMessages.toLocaleString()}\`\n` +
-      `> 🤖 **Lumin Messages** — \`${botMessages.toLocaleString()}\`\n` +
+      `> 🤖 **${SYSTEM_AGENT_CALLSIGN} Messages** — \`${botMessages.toLocaleString()}\`\n` +
       `> 📡 **Active Channels** — \`${activeChannels.size}\`` +
       uniqueChattersLine +
       `\n> 📊 **Avg / Day** — \`${avgPerDay}\`` +
@@ -299,7 +300,7 @@ export async function handleAnniversaryCommand(interaction) {
       topChannelLine
     );
 
-    // — Section 7: Lumin — Features & Memory ——
+    // — Section 7: Agent — Features & Memory ——
     const hasFeatureData = indexedTotal > 0 || factsCount > 0 || lastDigest
       || realiveActive || rouletteActive > 0 || quotesActive > 0;
 
@@ -320,7 +321,7 @@ export async function handleAnniversaryCommand(interaction) {
         : '';
 
       addSection(container,
-        `**🧠 Lumin — Features & Memory**\n\n` +
+        `**🧠 ${SYSTEM_AGENT_CALLSIGN} — Features & Memory**\n\n` +
         `> 🗂️ **Indexed Messages** — \`${indexedTotal.toLocaleString()}\`\n` +
         `> 📌 **Server Facts** — \`${factsCount}\`` +
         digestLine +

@@ -28,6 +28,108 @@ import { getFlag } from '../modules/shared/runtimeFlags.js';
 const logger = Logger.get('MemorySystem');
 
 // ============================================================================
+// MATHEMATICAL COGNITIVE MEMORY DYNAMICS (EBBINGHAUS & NEURAL RETRIEVAL)
+// ============================================================================
+
+/**
+ * Calculates Ebbinghaus memory retention probability R(Δt).
+ * R(Δt) = exp( - Δt / (S * I) )
+ *
+ * @param {number} timestampMs - Timestamp of the memory in milliseconds
+ * @param {number} [accessCount=1] - Previous recall frequency (spaced repetition)
+ * @param {number} [importanceWeight=1.0] - Intrinsic emotional/salience scalar [0.5, 3.0]
+ * @returns {number} Retention probability in (0, 1]
+ */
+export function calculateEbbinghausRetention(timestampMs, accessCount = 1, importanceWeight = 1.0) {
+  if (!timestampMs || isNaN(timestampMs)) return 1.0;
+  const deltaSeconds = Math.max(0, (Date.now() - timestampMs) / 1000);
+  const S_base = 604800; // 7 days baseline stability in seconds
+  const potentiation = 1.0 + 0.35 * Math.min(8, accessCount);
+  const S_effective = S_base * potentiation;
+  const emotionalWeight = Math.max(0.5, Math.min(3.0, importanceWeight));
+  const exponent = -deltaSeconds / (S_effective * emotionalWeight);
+  return Math.exp(exponent);
+}
+
+/**
+ * Composite neural ranking function combining semantic cosine similarity,
+ * temporal decay retention, and emotional salience.
+ * F_composite = w_sim * S_cos + w_ret * R(Δt) + w_salience * (I / 2.0)
+ *
+ * @param {number} similarityScore - Cosine similarity in [0, 1]
+ * @param {number} retentionScore - Ebbinghaus retention in [0, 1]
+ * @param {number} [emotionalSalience=1.0] - Emotional salience in [0.5, 3.0]
+ * @returns {number} Composite ranking score
+ */
+export function calculateCompositeRank(similarityScore, retentionScore, emotionalSalience = 1.0) {
+  const wSim = 0.60;
+  const wRet = 0.25;
+  const wSalience = 0.15;
+  const normSalience = Math.min(1.0, emotionalSalience / 2.0);
+  return (wSim * (similarityScore || 0)) + (wRet * (retentionScore || 0)) + (wSalience * normSalience);
+}
+
+/**
+ * Spaced retrieval potentiation calculation:
+ * S_{n+1} = S_n * (1 + alpha * P * exp(-beta * R))
+ *
+ * @param {number} currentStability - Current memory stability scalar S_n
+ * @param {number} retentionAtRecall - Retention probability R at moment of recall in (0, 1]
+ * @param {number} [potentiationFactor=1.0] - Feedback reinforcement factor P
+ * @returns {number} Updated stability S_{n+1}
+ */
+export function potentiateMemoryStability(currentStability, retentionAtRecall, potentiationFactor = 1.0) {
+  const alpha = 0.35;
+  const beta = 1.2;
+  const P = Math.max(0.1, potentiationFactor);
+  const R = Math.max(0.01, Math.min(1.0, retentionAtRecall));
+  const gain = 1 + alpha * P * Math.exp(-beta * R);
+  return currentStability * gain;
+}
+
+/**
+ * Information Entropy & Privacy Barrier Predicate.
+ * Protects confidential DM disclosures from leaking into public server contexts
+ * while permitting universal bridging of preferences and shared facts.
+ *
+ * Supports both signatures:
+ *   - (factText, isTargetPublicGuild, isSourceDM)
+ *   - (factText, personalization, isDm, isPersonal)
+ *
+ * @param {string} factText
+ * @param {boolean} param2
+ * @param {boolean} param3
+ * @param {boolean} [param4]
+ * @returns {boolean} True if admissible in target scope
+ */
+export function isFactAdmissible(factText, param2, param3, param4) {
+  if (!factText || typeof factText !== 'string') return false;
+
+  const isConfidential = /(?:password|token|secret|pin|confidential|private[_-]?key|auth|ssn)/i.test(factText);
+
+  // 4-parameter signature: (factText, personalization, isDm, isPersonal)
+  if (param4 !== undefined) {
+    const personalization = Boolean(param2);
+    const isDm = Boolean(param3);
+    const isPersonal = Boolean(param4);
+
+    if (isConfidential && !isDm) return false;
+    if (isPersonal && !personalization && !isDm) return false;
+    return true;
+  }
+
+  // 3-parameter signature: (factText, isTargetPublicGuild, isSourceDM)
+  const isTargetPublicGuild = Boolean(param2);
+  const isSourceDM = Boolean(param3);
+
+  if (isTargetPublicGuild && isSourceDM && isConfidential) {
+    return false;
+  }
+
+  return true;
+}
+
+// ============================================================================
 // MEMORY SYSTEM FACADE
 // ============================================================================
 
@@ -140,10 +242,9 @@ class MemorySystem {
     if (!query?.trim()) return [];
 
     try {
-      const {
-        crossContextEnabled = false,
-        otherGuildIds       = []
-      } = options;
+      const personalization = options.personalization ?? options.crossContextEnabled ?? true;
+      const crossContextEnabled = personalization;
+      const otherGuildIds       = options.otherGuildIds || [];
 
       const searchId   = historyId || guildId || userId;
       const queryLower = query.toLowerCase();
@@ -212,8 +313,8 @@ class MemorySystem {
           );
         }
 
-        // Cross-context RAG: other servers + DMs this user appears in
-        if (crossContextEnabled && userId) {
+        // Unified Cognitive Memory RAG: other servers + DMs this user appears in
+        if (personalization && userId) {
           crossRAGP = withTimeout(
             db.findSimilarMemoriesByUser(userId, queryEmbedding, MAX_RAG_RESULTS, historyId)
               .then(r => (r || []).filter(e => (e.score ?? 0) >= MIN_SIMILARITY_THRESHOLD))
@@ -239,10 +340,10 @@ class MemorySystem {
         crossRAGP
       ]);
 
-      // ── Phase 5a: build typed result objects ──────────────────────────────
+      // ── Phase 5a: build typed result objects with Ebbinghaus decay & privacy barrier ──
       const results = [];
 
-      // — Conversation RAG memories —
+      // — Conversation RAG memories with mathematical retention scoring —
       for (const entry of (ragRaw || []).slice(0, MAX_RAG_RESULTS)) {
         const text = (entry.messages || [])
           .map(m => extractTextFromMessage(m))
@@ -250,12 +351,14 @@ class MemorySystem {
           .join(' ')
           .slice(0, 400);
         if (text.trim().length > 5) {
-          results.push({ label: '[Conversation Memory]', text: text.trim(), score: entry.score ?? 0 });
+          const retention = calculateEbbinghausRetention(entry.timestamp, entry.accessCount || 1, 1.0);
+          const composite = calculateCompositeRank(entry.score ?? 0, retention, 1.0);
+          results.push({ label: '[Conversation Memory]', text: text.trim(), score: composite });
         }
       }
 
-      // — Cross-context RAG: other-server + DM memories —
-      if (crossContextEnabled) {
+      // — Unified Cognitive Cross-Context RAG —
+      if (personalization) {
         for (const entry of (crossRAGRaw || []).slice(0, Math.ceil(MAX_RAG_RESULTS / 2))) {
           const text = (entry.messages || [])
             .map(m => extractTextFromMessage(m))
@@ -263,33 +366,39 @@ class MemorySystem {
             .join(' ')
             .slice(0, 400);
           if (text.trim().length > 5) {
-            const isDM  = !entry.metadata?.guildId;
+            const isDM = !entry.metadata?.guildId;
+            // Privacy barrier: confidential information from DMs never leaks into public servers
+            if (!isFactAdmissible(text, Boolean(guildId), isDM)) continue;
+
+            const retention = calculateEbbinghausRetention(entry.timestamp, entry.accessCount || 1, 1.0);
+            const composite = calculateCompositeRank((entry.score ?? 0) * 0.90, retention, 1.0);
             results.push({
-              label: isDM ? '[DM Memory]' : '[Cross-Server Memory]',
+              label: isDM ? '[Personal DM Memory]' : '[Unified Memory]',
               text:  text.trim(),
-              score: (entry.score ?? 0) * 0.80  // slight discount vs. current-context
+              score: composite
             });
           }
         }
       }
 
-      // — User personal facts —
+      // — User personal facts (universally accessible under personalization) —
       for (const fact of (userFacts || [])) {
+        if (!isFactAdmissible(fact, Boolean(guildId), false)) continue;
         const score = scoreText(fact);
-        if (score > 0) results.push({ label: '[Stored Fact]', text: fact, score });
+        if (score > 0) results.push({ label: '[Personal Fact]', text: fact, score: score * 1.15 });
       }
 
       // — Personal data block (timezone, birthday, reminders, etc.) —
       if (personalData?.text) {
         const relevantLines = personalData.text
           .split('\n')
-          .filter(line => scoreText(line) > 0)
+          .filter(line => isFactAdmissible(line, Boolean(guildId), false) && scoreText(line) > 0)
           .slice(0, 3);
         if (relevantLines.length > 0) {
           results.push({
-            label: '[Personal Info]',
+            label: '[Personal Profile]',
             text:  relevantLines.join('\n'),
-            score: scoreText(relevantLines.join('\n'))
+            score: scoreText(relevantLines.join('\n')) * 1.2
           });
         }
       }
@@ -300,11 +409,12 @@ class MemorySystem {
         if (score > 0) results.push({ label: '[Server Fact]', text: fact, score });
       }
 
-      // — Other-server facts (cross-context only) —
-      if (crossContextEnabled) {
+      // — Other-server facts (unified cross-server facts) —
+      if (personalization) {
         for (const fact of (crossServerFacts || [])) {
+          if (!isFactAdmissible(fact, Boolean(guildId), false)) continue;
           const score = scoreText(fact);
-          if (score > 0) results.push({ label: '[Cross-Server Fact]', text: fact, score: score * 0.85 });
+          if (score > 0) results.push({ label: '[Unified Server Fact]', text: fact, score: score * 0.88 });
         }
       }
 
@@ -407,9 +517,9 @@ class MemorySystem {
         : Date.now();
       const cutoffTimestamp = maxTs - RAG_CUTOFF_MS;
 
-      const crossContextEnabled = userId
-        ? (state.userSettings?.[userId]?.crossContextEnabled ?? false)
-        : false;
+      const userSettings = state.userSettings?.[userId] || {};
+      const personalization = userSettings.personalization ?? userSettings.crossContextEnabled ?? true;
+      const crossContextEnabled = personalization;
 
       const searchPromises = [
         clusterEngine.clusterSearch(historyId, queryEmbedding, cutoffTimestamp)
@@ -474,9 +584,9 @@ class MemorySystem {
       : Date.now();
     const cutoffTimestamp = maxTs - RAG_CUTOFF_MS;
 
-    const crossContextEnabled = userId
-      ? (state.userSettings?.[userId]?.crossContextEnabled ?? false)
-      : false;
+    const userSettings = state.userSettings?.[userId] || {};
+    const personalization = userSettings.personalization ?? userSettings.crossContextEnabled ?? true;
+    const crossContextEnabled = personalization;
 
     const [queryEmbedding, personalData] = await Promise.all([
       embeddingService.generateEmbedding(currentQuery, 'RETRIEVAL_QUERY'),

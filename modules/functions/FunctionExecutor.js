@@ -15,7 +15,7 @@ import { Logger }                    from '../../core/Logger.js';
 import { FUNCTION_NAMES, MEMORY_ACTIONS } from './FunctionRegistry.js';
 import { vectorSearchOldSessions, getRecentSessionContext } from '../../commands/summary/SessionSummaryJob.js';
 import { setPendingSticker, setPendingGif, getLastBotMessage } from './pendingMedia.js';
-import { isGemmaModel }                  from '../config.js';
+import { isGemmaModel, SYSTEM_AGENT_CALLSIGN }                  from '../config.js';
 import axios                             from 'axios';
 
 const logger = Logger.get('FunctionExecutor');
@@ -1480,7 +1480,7 @@ async function fetchFromMemeApi(topic, subreddit, seenKey) {
 // ── SOURCE 2: Reddit JSON API ─────────────────────────────────────────────────
 
 const REDDIT_HEADERS = {
-  'User-Agent': 'LuminBot/2.0 (Discord Bot; open-source)',
+  'User-Agent': `${SYSTEM_AGENT_CALLSIGN}Bot/4.0 (Discord Bot; open-source)`,
   'Accept':     'application/json',
 };
 const REDDIT_TIMEOUT = 9000;

@@ -1,0 +1,29 @@
+# Node & Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment & Secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# Build & Runtime Cache
+dist/
+build/
+.cache/
+coverage/
+.vitest/
+
+# OS Specific
+.DS_Store
+Thumbs.db
+
+# Temporary Media Processing
+tmp/
+temp/
+*.tmp

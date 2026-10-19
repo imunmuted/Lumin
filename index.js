@@ -54,6 +54,7 @@ import {
 import { MAX_QUEUE_DEPTH_PER_USER, RAM_MEDIA_SUSPEND_THRESHOLD_MB } from './modules/config.js';
 import { scheduleDailyDigestJob } from './commands/summary/SessionSummaryJob.js';
 import { WEEKLY_SUMMARY_ENABLED }    from './modules/config.js';
+import { telemetryWatchdog }          from './core/TelemetryWatchdogDaemon.js';
 
 const logger = Logger.get('Index');
 
@@ -93,17 +94,14 @@ const app        = express();
 const httpServer = createServer(app);
 
 app.get(EXPRESS_CONFIG.STATUS_PATH, (_req, res) => {
-  const mem = process.memoryUsage();
+  const telemetry = telemetryWatchdog.getTelemetry();
   res.json({
-    status:    'online',
-    bot:       client.user?.tag || 'Starting…',
-    uptime:    process.uptime(),
-    timestamp: new Date().toISOString(),
-    memory: {
-      heapUsedMB:  (mem.heapUsed  / 1_048_576).toFixed(1),
-      heapTotalMB: (mem.heapTotal / 1_048_576).toFixed(1),
-      rssMB:       (mem.rss       / 1_048_576).toFixed(1)
-    },
+    status:        'online',
+    project:       'Helium',
+    bot:           client.user?.tag || 'Starting…',
+    uptime:        process.uptime(),
+    timestamp:     new Date().toISOString(),
+    telemetry,
     dailyMessages: getDailyMessageStats()
   });
 });
@@ -111,11 +109,13 @@ app.get(EXPRESS_CONFIG.STATUS_PATH, (_req, res) => {
 app.get(EXPRESS_CONFIG.HEALTH_CHECK_PATH, (_req, res) => {
   const healthy = client.isReady() && client.ws.status === 0;
   const msgStats = getDailyMessageStats();
+  const telemetry = telemetryWatchdog.getTelemetry();
   res.status(healthy ? 200 : 503).json({
     status:        healthy ? 'healthy' : 'degraded',
     ready:         client.isReady(),
     wsStatus:      client.ws.status,
     timestamp:     new Date().toISOString(),
+    telemetry,
     dailyMessages: msgStats
   });
 });

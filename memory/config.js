@@ -1,7 +1,10 @@
 // Memory folder config — re-exports from master modules/config.js.
 // Import memory config from here rather than reaching up to ../../modules/config.js.
 export {
+  ENABLE_REDIS,
   CACHE_ENABLED,
+  FAST_MEMORY_CACHE_MAX_BYTES,
+  PERSONALIZATION_DEFAULT,
   ENABLE_RAG,
   MEMORY_RECENT_WINDOW,
   MEMORY_MAX_RAG_RESULTS,

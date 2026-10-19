@@ -31,7 +31,7 @@ import {
 } from './QueueManager.js';
 import {
   DEFAULT_MODEL, BOT_CONFIG, STATE_CONFIG,
-  MIGRATION_CONFIG, POLL_CONFIG
+  MIGRATION_CONFIG, POLL_CONFIG, PERSONALIZATION_DEFAULT
 } from './config.js';
 
 const logger = Logger.get('StateManager');
@@ -61,14 +61,15 @@ export const DEFAULT_SERVER_SETTINGS = Object.freeze({
 
 /** Default settings applied to new users. @readonly */
 export const DEFAULT_USER_SETTINGS = Object.freeze({
-  selectedModel:      DEFAULT_MODEL,
-  responseFormat:     'Normal',
-  showActionButtons:  false,
-  continuousReply:    true,
-  customPersonality:  null,
-  embedColor:         '#5B7C99',
-  gemmaEnabled:       false,
-  crossContextEnabled: false
+  selectedModel:       DEFAULT_MODEL,
+  responseFormat:      'Normal',
+  showActionButtons:   false,
+  continuousReply:     true,
+  customPersonality:   null,
+  embedColor:          '#5B7C99',
+  gemmaEnabled:        false,
+  personalization:     PERSONALIZATION_DEFAULT,
+  crossContextEnabled: PERSONALIZATION_DEFAULT
 });
 
 // POLL_CONFIG, MIGRATION_CONFIG, STATE_CONFIG imported from ./config.js — do not redefine here.

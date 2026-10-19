@@ -27,7 +27,8 @@ import {
   safetySettings,
   getGenerationConfig,
   RATE_LIMIT_ERRORS,
-  DEFAULT_MODEL
+  DEFAULT_MODEL,
+  SYSTEM_AGENT_CALLSIGN
 } from '../../modules/config.js';
 
 import { Logger } from '../../core/Logger.js';
@@ -147,7 +148,7 @@ export async function summarizeYouTubeVideo(interaction, videoUrl) {
         '📺', 'YouTube Video Summary',
         summaryText,
         [{ label: '🔗  **Source**', value: videoUrl }],
-        'Summarized by Lumin'
+        `Summarized by ${SYSTEM_AGENT_CALLSIGN}`
       )],
       flags: IS_COMPONENTS_V2
     });
@@ -280,7 +281,7 @@ export async function summarizeDiscordConversation(interaction, messageLink, cou
           { label: '📍  **Channel**',  value: `#${result.channelName} — ${result.guildName}` },
           { label: '💬  **Messages**', value: String(result.messageCount) }
         ],
-        'Summarized by Lumin'
+        `Summarized by ${SYSTEM_AGENT_CALLSIGN}`
       )],
       flags: IS_COMPONENTS_V2
     });
@@ -354,7 +355,7 @@ export async function summarizeWebsite(interaction, websiteUrl) {
         '🌐', 'Website Summary',
         summaryText,
         [{ label: '🔗  **Source**', value: websiteUrl + urlStatLine }],
-        'Summarized by Lumin'
+        `Summarized by ${SYSTEM_AGENT_CALLSIGN}`
       )],
       flags: IS_COMPONENTS_V2
     });

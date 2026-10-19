@@ -22,6 +22,7 @@ import {
 } from '../../managers/BotManager.js';
 import * as db     from '../../database.js';
 import { Logger }  from '../../core/Logger.js';
+import { SYSTEM_AGENT_CALLSIGN, PERSONALIZATION_DEFAULT } from '../config.js';
 
 const logger = Logger.get('UserSettings');
 
@@ -176,7 +177,7 @@ export async function showMainSettings(interaction, isUpdate = false) {
       ? interaction.member.permissions.has(0x20n)
       : false;
 
-    let descText = '**Settings**\nSelect a configuration tier below to customize Lumin.\n\n' +
+    let descText = `**Settings**\nSelect a configuration tier below to customize ${SYSTEM_AGENT_CALLSIGN}.\n\n` +
                    '**User Settings**\nPersonal defaults, response style, behavior, and privacy.';
     if (canManage) {
       descText += '\n\n**Server Settings**\nServer-wide overrides, channel controls, and data management.';
@@ -242,7 +243,7 @@ export async function showUserSettings(interaction, isUpdate = false) {
       {
         text: `**User Settings** — Page 1 of ${TOTAL_USER_PAGES}\n\n` +
               '**Response Format**\n' +
-              'Controls how Lumin sends replies. Normal is plain text; Embedded uses rich cards.',
+              `Controls how ${SYSTEM_AGENT_CALLSIGN} sends replies. Normal is plain text; Embedded uses rich cards.`,
         row: new ActionRowBuilder().addComponents(...formatBtns(responseFormat))
       },
       {
@@ -273,20 +274,20 @@ export async function showUserSettingsPage2(interaction, isUpdate = false) {
   const userId              = interaction.user.id;
   const userSettings        = state.userSettings[userId] || {};
   const continuousReply     = userSettings.continuousReply     ?? true;
-  const crossContextEnabled = userSettings.crossContextEnabled ?? false;
+  const personalization     = userSettings.personalization ?? userSettings.crossContextEnabled ?? PERSONALIZATION_DEFAULT;
 
   const container = buildContainer(
     [
       {
         text: `**User Settings** — Page 2 of ${TOTAL_USER_PAGES}\n\n` +
               '**Continuous Reply**\n' +
-              'When enabled, Lumin responds to your consecutive messages without requiring a mention each time.',
+              `When enabled, ${SYSTEM_AGENT_CALLSIGN} responds to your consecutive messages without requiring a mention each time.`,
         row: new ActionRowBuilder().addComponents(toggleBtn('user_toggle_continuous_reply', continuousReply))
       },
       {
-        text: '**Cross-Context Memory**\n' +
-              'When enabled, Lumin can draw on conversation history from across servers and DMs.',
-        row: new ActionRowBuilder().addComponents(toggleBtn('user_toggle_cross_context', crossContextEnabled))
+        text: '**Personalization**\n' +
+              `When enabled, ${SYSTEM_AGENT_CALLSIGN} unifies your episodic memory across servers and DMs with cognitive decay.`,
+        row: new ActionRowBuilder().addComponents(toggleBtn('user_toggle_personalization', personalization))
       }
     ],
     buildUserNavRow(2)
@@ -319,7 +320,7 @@ export async function showUserSettingsPage3(interaction, isUpdate = false) {
       {
         text: `**User Settings** — Page 3 of ${TOTAL_USER_PAGES}\n\n` +
               '**Embed Color**\n' +
-              `Set a personal accent color for Lumin's embeds. Current: \`${embedColor}\``,
+              `Set a personal accent color for ${SYSTEM_AGENT_CALLSIGN}'s embeds. Current: \`${embedColor}\``,
         row: new ActionRowBuilder().addComponents(
           new ButtonBuilder()
             .setCustomId('user_embed_color')
@@ -329,7 +330,7 @@ export async function showUserSettingsPage3(interaction, isUpdate = false) {
       },
       {
         text: '**Custom Personality**\n' +
-              `Define a personal persona for Lumin. Status: \`${hasPersonality ? 'Active' : 'Default'}\``,
+              `Define a personal persona for ${SYSTEM_AGENT_CALLSIGN}. Status: \`${hasPersonality ? 'Active' : 'Default'}\``,
         row: new ActionRowBuilder().addComponents(
           new ButtonBuilder()
             .setCustomId('user_custom_personality')
@@ -477,7 +478,7 @@ export async function showUserPersonalityModal(interaction) {
 
   const input = new TextInputBuilder()
     .setCustomId('personality_input')
-    .setLabel("Define Lumin's user personality")
+    .setLabel(`Define ${SYSTEM_AGENT_CALLSIGN}'s user personality`)
     .setStyle(TextInputStyle.Paragraph)
     .setPlaceholder('Enter your custom personality instructions...')
     .setMinLength(10).setMaxLength(4000);

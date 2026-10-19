@@ -23,6 +23,7 @@ import { state, saveStateToFile }    from '../../managers/BotManager.js';
 import { memorySystem }               from '../../memory/MemorySystem.js';
 import * as db                        from '../../database/index.js';
 import { Logger }                     from '../../core/Logger.js';
+import { SYSTEM_AGENT_CALLSIGN }      from '../../modules/config.js';
 import { scheduleReminder }           from './ReminderScheduler.js';
 import { getUserTime }                 from '../timezone.js';
 
@@ -69,7 +70,7 @@ export async function handleReminderCommand(interaction) {
     container.addTextDisplayComponents(
       new TextDisplayBuilder().setContent(
         '**Reminders**\n' +
-        'Create, view, or remove personal reminders. Lumin will notify you at your scheduled time.\n\n' +
+        `Create, view, or remove personal reminders. ${SYSTEM_AGENT_CALLSIGN} will notify you at your scheduled time.\n\n` +
         `**Active Reminders:** ${activeCount}/${MAX_REMINDERS_PER_USER}`
       )
     );

@@ -50,6 +50,7 @@ import {
   handleUserResponseFormatEmbedded,
   handleUserToggleActionButtons,
   handleUserToggleContinuousReply,
+  handleUserTogglePersonalization,
   handleUserToggleCrossContext,
   handleUserPersonalityModal,
   handleServerPersonalityModal,
@@ -121,6 +122,7 @@ const BUTTON_HANDLERS = {
   'user_set_format_embedded':     handleUserResponseFormatEmbedded,
   'user_toggle_action_buttons':   handleUserToggleActionButtons,
   'user_toggle_continuous_reply': handleUserToggleContinuousReply,
+  'user_toggle_personalization':  handleUserTogglePersonalization,
   'user_toggle_cross_context':    handleUserToggleCrossContext,
 
   // ── Server toggle buttons ──────────────────────────────────────────────────
