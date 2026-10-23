@@ -13,16 +13,8 @@
 // ── Connection & infrastructure ───────────────────────────────────────────
 export { connectDB, closeDB, getDB } from './connection.js';
 
-// ── Vector search + personal context helpers ──────────────────────────────
-export {
-  findSimilarMemories,
-  findSimilarMemoriesWithFilter,
-  findSimilarMemoriesByUser,
-  getBirthday,
-  getUserReminders,
-  getComplimentCount,
-  getUserDailyQuote
-} from './vectorSearch.js';
+// ── Lightweight feature lookups (not memory retrieval) ────────────────────
+export { getBirthday, getUserReminders, getComplimentCount, getUserDailyQuote } from './collections/contextLookups.js';
 
 // ── Settings ──────────────────────────────────────────────────────────────
 export {
@@ -56,15 +48,8 @@ export {
   deleteChatHistory
 } from './collections/historyRepo.js';
 
-// ── Memory (RAG) ──────────────────────────────────────────────────────────
-export {
-  saveMemoryEntry,
-  getMemoryEntries,
-  getMemoryEmbeddings,
-  getMemoryEmbeddingsSampled,
-  getMemoryEntriesByIds,
-  deleteOldMemoryEntries
-} from './collections/memoryRepo.js';
+// Legacy vector-memory collections are deliberately not exposed by the active repository facade.
+// Existing MongoDB records are left untouched for a separately reviewed retention migration.
 
 // ── Feature collections ───────────────────────────────────────────────────
 export {

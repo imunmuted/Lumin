@@ -18,7 +18,7 @@ import fs   from 'fs/promises';
 
 import {
   state, TEMP_DIR, BOT_CONFIG,
-  DEFAULT_SERVER_SETTINGS
+  DEFAULT_SERVER_SETTINGS, getDefaultServerSettings
 } from '../../managers/BotManager.js';
 import * as db    from '../../database.js';
 import { Logger } from '../../core/Logger.js';
@@ -183,8 +183,8 @@ export async function showServerSettings(interaction, isUpdate = false) {
 
   const guildId        = interaction.guild.id;
   const ss             = state.serverSettings[guildId] || {};
-  const responseFormat = ss.responseFormat    || DEFAULT_SERVER_SETTINGS.responseFormat || 'Normal';
-  const showButtons    = ss.showActionButtons  ?? DEFAULT_SERVER_SETTINGS.showActionButtons ?? true;
+  const responseFormat = ss.responseFormat    || getDefaultServerSettings().responseFormat || 'Normal';
+  const showButtons    = ss.showActionButtons  ?? getDefaultServerSettings().showActionButtons ?? true;
 
   const container = buildContainer(
     [

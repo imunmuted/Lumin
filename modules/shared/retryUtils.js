@@ -140,7 +140,7 @@ function sleep(ms) {
  *   () => genAI.models.generateContent(request),
  *   {
  *     maxAttempts: 3,
- *     modelName:   'gemini-2.0-flash',
+ *     modelName:   'gemini-3.5-flash-lite',
  *     keyLabel:    'Key 1',
  *     onRateLimit: (err) => apiKeyManager.switchToNextKeyOrModel(err),
  *   }

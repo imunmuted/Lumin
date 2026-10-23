@@ -24,7 +24,7 @@ import { fetchMessagesForSummary } from '../../utils.js';
 
 import {
   MODELS,
-  safetySettings,
+  getSafetySettings,
   getGenerationConfig,
   RATE_LIMIT_ERRORS,
   DEFAULT_MODEL
@@ -88,8 +88,8 @@ const SUMMARY_MODEL          = DEFAULT_MODEL;
 // Summary always uses flash-lite → 3.5-flash, never Gemma:
 // summary needs file URI uploads and tool use that Gemma doesn't support.
 const SUMMARY_FALLBACK_CHAIN = [
-  'gemini-3.1-flash-lite',
-  'gemini-3.5-flash'
+  'gemini-3.5-flash-lite',
+  'gemini-3.8-flash'
 ];
 const MAX_RETRY_ATTEMPTS     = 3;
 const MAX_UPLOAD_RETRIES     = 3;
@@ -128,8 +128,7 @@ export async function summarizeYouTubeVideo(interaction, videoUrl) {
             ]
           }
         ],
-        config: { ...getGenerationConfig(modelName) },
-        safetySettings
+        config: { ...getGenerationConfig(modelName), safetySettings: getSafetySettings(modelName) }
       };
       return genAI.models.generateContent(request);
     };
@@ -254,8 +253,7 @@ export async function summarizeDiscordConversation(interaction, messageLink, cou
             ]
           }
         ],
-        config: { ...getGenerationConfig(modelName) },
-        safetySettings
+        config: { ...getGenerationConfig(modelName), safetySettings: getSafetySettings(modelName) }
       };
       return genAI.models.generateContent(request);
     };
@@ -329,9 +327,9 @@ export async function summarizeWebsite(interaction, websiteUrl) {
         ],
         config: {
           ...getGenerationConfig(modelName),
-          tools: [{ urlContext: {} }, { googleSearch: {} }]
-        },
-        safetySettings
+          tools: [{ urlContext: {} }, { googleSearch: {} }],
+          safetySettings: getSafetySettings(modelName)
+        }
       };
       return genAI.models.generateContent(request);
     };

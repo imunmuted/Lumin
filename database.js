@@ -17,7 +17,6 @@ export * from './database/index.js';
 
 import {
   connectDB, closeDB, getDB,
-  findSimilarMemories, findSimilarMemoriesWithFilter,
   getBirthday, getUserReminders, getComplimentCount, getUserDailyQuote,
   saveUserSettings, getUserSettings, getAllUserSettings,
   saveServerSettings, getServerSettings, getAllServerSettings,
@@ -27,7 +26,6 @@ import {
   saveChannelSetting, getChannelSetting, getAllChannelSettings,
   saveActiveUsersInChannels, getActiveUsersInChannels,
   saveUserResponsePreference, getUserResponsePreference, getAllUserResponsePreferences,
-  saveMemoryEntry, getMemoryEntries, deleteOldMemoryEntries,
   saveImageUsage, getAllImageUsages,
   saveBirthday, getAllBirthdays, deleteBirthday,
   saveReminder, getAllReminders, updateReminder, deleteReminder,
@@ -47,7 +45,6 @@ import {
 /** Default export mirrors the original database.js `export default {}` object. */
 export default {
   connectDB, closeDB, getDB,
-  findSimilarMemories, findSimilarMemoriesWithFilter,
   getBirthday, getUserReminders, getComplimentCount, getUserDailyQuote,
   saveUserSettings, getUserSettings, getAllUserSettings,
   saveServerSettings, getServerSettings, getAllServerSettings,
@@ -57,7 +54,6 @@ export default {
   saveChannelSetting, getChannelSetting, getAllChannelSettings,
   saveActiveUsersInChannels, getActiveUsersInChannels,
   saveUserResponsePreference, getUserResponsePreference, getAllUserResponsePreferences,
-  saveMemoryEntry, getMemoryEntries, deleteOldMemoryEntries,
   saveImageUsage, getAllImageUsages,
   saveBirthday, getAllBirthdays, deleteBirthday,
   saveReminder, getAllReminders, updateReminder, deleteReminder,

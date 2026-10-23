@@ -13,25 +13,27 @@ import {
   requestQueues,
   BOT_CONFIG,
   DEFAULT_SERVER_SETTINGS,
-  DEFAULT_USER_SETTINGS
+  DEFAULT_USER_SETTINGS,
+  getDefaultServerSettings,
+  getDefaultUserSettings
 } from '../../managers/BotManager.js';
 import { checkAndIncrementDailyMessages } from '../../managers/QueueManager.js';
-import { getLatestSessionSummary } from '../../commands/summary/SessionSummaryJob.js';
-import { WEEKLY_SUMMARY_ENABLED } from '../../modules/config.js';
 import { memorySystem }  from '../../memory/MemorySystem.js';
 import { Logger }         from '../../core/Logger.js';
 import { Embeds }         from '../shared/embedBuilder.js';
 import {
-  MODELS, safetySettings, DEFAULT_MODEL, GEMMA_MODELS,
-  ENABLE_GEMMA, GEMMA_DEFAULT_MODEL,
+  MODELS, DEFAULT_MODEL, GEMMA_MODELS,
+  ENABLE_GEMMA, GEMMA_DEFAULT_MODEL, getSafetySettings, resolveModelId,
   PDF_ENABLED_FOR_GEMINI, RAM_MEDIA_SUSPEND_THRESHOLD_MB,
   isGemmaModel
 } from '../../modules/config.js';
 import { typingManager, handleModelResponse } from './ResponseHandler.js';
-import { prepareMessageContent, extractFileText } from './PromptBuilder.js';
+import { prepareMessageContent } from './PromptBuilder.js';
 import { processPromptAndMediaAttachments, isSupportedAttachment, classifyAttachments } from './MediaHandler.js';
 import config from '../../config.js';
 import { functionTools } from '../functions/FunctionRegistry.js';
+import { canAnalyzeAttachments } from '../../security/attachmentPolicy.js';
+import { getActiveModel, getPromptOverrides, getRuntimeFeatureFlag } from '../../helium/runtimeRegistry.js';
 
 const logger = Logger.get('MessageProcessor');
 
@@ -57,9 +59,8 @@ const CONTEXT_MARKERS = Object.freeze({
 // - codeExecution → run Python for maths/data tasks
 // - functionDeclarations → Lumin's custom tools (memory, reminders, etc.)
 //
-// NOTE: tool combinations are Preview, Gemini 3 models only. The fallback
-// model (gemini-3.5-flash) does NOT support mixing built-in tools with
-// functionDeclarations — ResponseHandler strips them dynamically per-model.
+// NOTE: built-in tool combinations vary by model. ResponseHandler consults the
+// central model-capability registry and strips unsupported tools per request.
 const ALL_TOOLS = Object.freeze([
   { googleSearch:  {} },
   { urlContext:    {} },
@@ -75,7 +76,7 @@ const ALL_TOOLS = Object.freeze([
  * Filter attachments based on model capabilities and current RAM pressure.
  *
  * Rules:
- *  - PDFs are stripped for Gemini when PDF_ENABLED_FOR_GEMINI = false
+ *  - Attachments are omitted unless the user has an explicit attachment grant
  *  - All media (images/video/audio) is stripped when RAM is above the
  *    safety threshold (isMediaSuspended()) to give the process room to breathe
  *
@@ -100,7 +101,23 @@ function filterAttachments(attachments, modelName) {
     return { supported: [], unsupported: [] };
   }
 
-  return classifyAttachments(attachments, modelName);
+  const candidates = [];
+  const unsupportedByFlag = [];
+  for (const attachment of attachments) {
+    const type = String(attachment?.contentType || attachment?.content_type || '').toLowerCase();
+    const name = String(attachment?.name || attachment?.filename || attachment?.fileName || '').toLowerCase();
+    let enabled = true;
+    let reason = '';
+    if (type.startsWith('image/')) { enabled = getRuntimeFeatureFlag('ENABLE_IMAGE_PROCESSING'); reason = 'Image processing is disabled by the Helium runtime policy.'; }
+    else if (type.startsWith('video/')) { enabled = getRuntimeFeatureFlag('ENABLE_VIDEO_PROCESSING'); reason = 'Video processing is disabled by the Helium runtime policy.'; }
+    else if (type.startsWith('audio/')) { enabled = getRuntimeFeatureFlag('ENABLE_AUDIO_PROCESSING'); reason = 'Audio processing is disabled by the Helium runtime policy.'; }
+    else if (name.endsWith('.pdf') || type === 'application/pdf') { enabled = getRuntimeFeatureFlag('PDF_ENABLED_FOR_GEMINI'); reason = 'PDF processing is disabled by the Helium runtime policy.'; }
+    else { enabled = getRuntimeFeatureFlag('ENABLE_FILE_PROCESSING'); reason = 'File processing is disabled by the Helium runtime policy.'; }
+    if (enabled) candidates.push(attachment);
+    else unsupportedByFlag.push({ name: attachment?.name || attachment?.filename || 'attachment', reason });
+  }
+  const classified = classifyAttachments(candidates, modelName);
+  return { supported: classified.supported, unsupported: [...unsupportedByFlag, ...classified.unsupported] };
 }
 
 /**
@@ -116,12 +133,12 @@ function resolveMessageContext(userId, guildId, channelId) {
 
   // L-10 fix: if the user has crossContextEnabled, their own settings always
   // take precedence even when the server has overrideUserSettings = true.
-  const userCrossContext = userSettings.crossContextEnabled ?? false;
+  const userCrossContext = userSettings.crossContextEnabled ?? getRuntimeFeatureFlag('CROSS_CONTEXT_ENABLED');
   const effectiveSettings = (serverSettings.overrideUserSettings && !userCrossContext)
     ? serverSettings
     : userSettings;
 
-  const isServerHistory  = guildId ? (serverSettings.serverChatHistory  ?? DEFAULT_SERVER_SETTINGS.serverChatHistory) : false;
+  const isServerHistory  = guildId ? (serverSettings.serverChatHistory  ?? getDefaultServerSettings().serverChatHistory) : false;
   const isChannelHistory = guildId ? !!state.channelWideChatHistory[channelId] : false;
 
   // Session isolation:
@@ -146,14 +163,19 @@ function resolveMessageContext(userId, guildId, channelId) {
   // When true, all chat conversations use GEMMA_DEFAULT_MODEL.
   // NOTE: Gemma is NOT applied to slash commands that need incompatible tools
   // (e.g. /search, /summary) — those contexts override modelName themselves.
+  // Console override takes effect for the next request and is authoritative.
+  // In its absence, existing per-user/server preferences remain respected.
+  const runtimeModel = getActiveModel();
   let modelName;
-  if (ENABLE_GEMMA) {
+  if (runtimeModel) {
+    modelName = resolveModelId(runtimeModel);
+  } else if (ENABLE_GEMMA) {
     modelName = MODELS[GEMMA_DEFAULT_MODEL] || GEMMA_MODELS[0];
   } else {
-    const gemmaEnabled  = effectiveSettings.gemmaEnabled ?? false;
+    const gemmaEnabled = effectiveSettings.gemmaEnabled ?? false;
     modelName = gemmaEnabled
       ? (MODELS[GEMMA_DEFAULT_MODEL] || GEMMA_MODELS[0])
-      : (MODELS[effectiveSettings.selectedModel] || DEFAULT_MODEL);
+      : resolveModelId(effectiveSettings.selectedModel || DEFAULT_MODEL);
   }
 
   return { userSettings, serverSettings, effectiveSettings, historyId, modelName };
@@ -170,7 +192,11 @@ function resolveMessageContext(userId, guildId, channelId) {
  * @returns {string}
  */
 async function buildSystemInstruction(message, effectiveSettings, serverSettings, channelId, guildId, extraSuffix = '') {
-  let instructions = config.coreSystemRules;
+  const promptOverrides = getPromptOverrides();
+  const applyBotName = (value) => typeof value === 'string'
+    ? value.replace(/\bLumin\b/gi, BOT_CONFIG.NAME)
+    : '';
+  let instructions = applyBotName(promptOverrides.systemPrompt ?? config.coreSystemRules);
 
   let customInstructions;
   if (guildId) {
@@ -188,8 +214,8 @@ async function buildSystemInstruction(message, effectiveSettings, serverSettings
   }
 
   instructions += customInstructions
-    ? `\n\nADDITIONAL PERSONALITY:\n${customInstructions}`
-    : `\n\n${config.defaultPersonality}`;
+    ? `\n\nADDITIONAL PERSONALITY:\n${applyBotName(customInstructions)}`
+    : `\n\n${applyBotName(promptOverrides.defaultPersonality ?? config.defaultPersonality)}`;
 
   // Build a rich user identity block so the bot always knows exactly who it's
   // talking to. In guild contexts we prefer the server-specific display name
@@ -229,71 +255,10 @@ async function buildSystemInstruction(message, effectiveSettings, serverSettings
       `they mean ${serverName} > #${channelName}.`;
   }
 
-  // ── C-1 fix: Always inject stored userFacts directly into system prompt ──
-  // Single indexed DB read (~1ms), zero embedding API calls, zero delay.
-  // This fires every message so the bot always knows name, facts, preferences.
-  try {
-    const { default: db } = await import('../../database/index.js');
-    const userFacts = await db.getUserFacts(message.author.id);
-    if (userFacts?.length > 0) {
-      instructions += `\n\n## Stored Facts About This User\n`;
-      instructions += userFacts.map(f => `- ${f}`).join('\n');
-    }
-  } catch { /* non-fatal */ }
-
-  // ── Server facts: guild-scoped shared memory (visible to ALL server users) ─
-  // Injected unconditionally in guild context so the bot can give consistent
-  // answers about inter-member relationships from any user's perspective.
-  // Facts are grouped by category for clearer LLM parsing.
-  if (guildId) {
-    try {
-      const { default: db2 } = await import('../../database/index.js');
-      const grouped = await db2.getServerFactsCategorized(guildId);
-      if (grouped.size > 0) {
-        instructions += `\n\n## Shared Server Knowledge (visible to all members — use for consistent answers)\n`;
-        for (const [label, facts] of grouped) {
-          instructions += `\n### ${label}\n`;
-          instructions += facts.map(f => `- ${f}`).join('\n');
-        }
-        instructions += `\n\n> When any user asks about these facts (relationships, nicknames, roles, etc.) answer from this knowledge directly — never say you don't know.`;
-      }
-    } catch { /* non-fatal */ }
-  }
-
-  // ── Cross-context status ────────────────────────────────────────────────
-  // Tell the AI whether cross-context memory is active so it can surface it
-  // in conversation when relevant (e.g. "I remember you mentioned this in DMs").
-  const userId2 = message.author.id;
-  const crossContextOn = state.userSettings?.[userId2]?.crossContextEnabled ?? false;
-  if (guildId) {
-    if (crossContextOn) {
-      instructions += `\n\n## Cross-Context Memory: ENABLED\n` +
-        `You have access to this user's memories from their DMs with you AND from other servers they share with you. ` +
-        `When relevant, you may recall information across these contexts (e.g. "I remember you mentioned X in our DMs"). ` +
-        `Label the source subtly so the user knows why you remembered it.`;
-    } else {
-      instructions += `\n\n## Cross-Context Memory: DISABLED\n` +
-        `Memory retrieval is limited to this server's conversation history only. ` +
-        `Do NOT reference facts from this user's DMs or other servers.`;
-    }
-  } else {
-    // DM context — cross-context means server memories bleed into DMs
-    if (crossContextOn) {
-      instructions += `\n\n## Cross-Context Memory: ENABLED\n` +
-        `You have access to this user's memories from servers they are in with you, in addition to these DMs. ` +
-        `When relevant, you may recall information across contexts.`;
-    }
-  }
-
-  // ── Session summary injection (latest session context — zero RAG cost) ─────
-  if (WEEKLY_SUMMARY_ENABLED) {
-    try {
-      const sessionSummary = await getLatestSessionSummary(message.author.id);
-      if (sessionSummary) {
-        instructions += `\n\n## Recent Session Memory (Your First-Person Recall)\n${sessionSummary}`;
-      }
-    } catch { /* non-fatal */ }
-  }
+  // Historical memory retrieval, cross-context facts and session summaries are
+  // intentionally not injected. The separate context provider supplies only
+  // the most recent five persisted messages; a future memory system can extend
+  // this boundary explicitly without changing the message pipeline.
 
   if (extraSuffix) instructions += extraSuffix;
 
@@ -382,14 +347,14 @@ export async function handleTextMessage(message) {
 
   typingManager.start(message.channel);
 
-  // ── Daily message limit (Gemini 3.1 Flash Lite: 500/day free tier) ────────
+  // ── Global daily message quota guard ───────────────────────────────────────
   const limitCheck = checkAndIncrementDailyMessages();
   if (!limitCheck.allowed) {
     typingManager.stop(channelId);
     const resetTime = new Date(limitCheck.resetAt).toUTCString();
     await message.reply({
       embeds: [Embeds.error('Daily Limit Reached',
-        `Lumin has reached the 500 message/day limit for today.\nResets at: **${resetTime}**`
+        `${BOT_CONFIG.NAME} has reached the configured daily message limit.\nResets at: **${resetTime}**`
       )]
     }).catch(() => {});
     return;
@@ -407,15 +372,19 @@ export async function handleTextMessage(message) {
     }
 
     // ── Prepare message content (mentions, reply context, GIFs, etc.) ──
-    const prepared = await prepareMessageContent(message);
+    const allowAttachments = canAnalyzeAttachments({ userId: message.author.id, state });
+    const prepared = await prepareMessageContent(message, { allowAttachments });
     message = prepared.message; // may be a refetched version
 
     const allAttachments = prepared.allAttachments;
 
     if (!hasAnyContent(prepared.messageContent, allAttachments)) {
       typingManager.stop(channelId);
+      const attachmentsOnly = message.attachments?.size > 0 && !allowAttachments;
       await message.reply({
-        embeds: [Embeds.info('💬 Empty Message', "You didn't provide any content. What would you like to talk about?")]
+        embeds: [Embeds.info(attachmentsOnly ? 'Attachments Disabled' : '💬 Empty Message', attachmentsOnly
+          ? 'Attachment analysis is disabled by default. Send a text message, or ask the bot owner to grant attachment access for your account.'
+          : "You didn't provide any content. What would you like to talk about?")]
       });
       return;
     }
@@ -444,7 +413,7 @@ export async function handleTextMessage(message) {
 
     // ── Build Gemini parts array ───────────────────────────────────────
     const [fileExtractResult, initialParts] = await Promise.all([
-      extractFileText(message, prepared.messageContent),
+      Promise.resolve({ finalPrompt: prepared.messageContent, summaryParts: prepared.summaryParts || [] }),
       processPromptAndMediaAttachments(prepared.messageContent, message, filteredAttachments, modelName)
     ]);
 
@@ -464,7 +433,7 @@ export async function handleTextMessage(message) {
       null,
       modelName,
       systemInstruction,
-      safetySettings,
+      getSafetySettings(modelName),
       ALL_TOOLS,
       history,
       parts,
@@ -508,7 +477,7 @@ export async function handleBatchedMessages(queuedMessages) {
   try {
     // Prepare all messages in parallel
     const preparedMessages = await Promise.all(
-      queuedMessages.map(msg => prepareMessageContent(msg))
+      queuedMessages.map(msg => prepareMessageContent(msg, { allowAttachments: canAnalyzeAttachments({ userId: msg.author.id, state }) }))
     );
 
     // Combine all messages into one labelled prompt
@@ -531,7 +500,7 @@ export async function handleBatchedMessages(queuedMessages) {
     if (!hasAnyContent(combinedPrompt, allAttachments)) {
       typingManager.stop(channelId);
       await firstMessage.reply({
-        embeds: [Embeds.info('💬 Empty Message', "You didn't provide any content. What would you like to talk about?")]
+        embeds: [Embeds.info('💬 Empty Message', "You didn't provide any text content to process. Attachment-only messages require an explicit attachment-access grant.")]
       });
       return;
     }
@@ -566,7 +535,7 @@ export async function handleBatchedMessages(queuedMessages) {
       null,
       modelName,
       systemInstruction,
-      safetySettings,
+      getSafetySettings(modelName),
       ALL_TOOLS,
       history,
       parts,

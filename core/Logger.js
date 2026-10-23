@@ -290,7 +290,7 @@ class ModuleLogger {
  * import { Logger } from '../core/Logger.js';
  * const log = Logger.get('ApiKeyManager');
  * log.info('Rotated to Key 2', { oldKey: 1, newKey: 2 });
- * log.warn('Rate limit hit', { model: 'gemini-2.0-flash' });
+ * log.warn('Rate limit hit', { model: 'gemini-3.5-flash-lite' });
  * log.exception('saveStateToFile', error);
  */
 export const Logger = Object.freeze({

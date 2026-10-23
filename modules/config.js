@@ -5,143 +5,161 @@ import { HarmBlockThreshold, HarmCategory } from '@google/genai';
 export const BOT_CONFIG = Object.freeze({
   DEFAULT_RESPONSE_FORMAT: 'Normal',
   HEX_COLOUR:  '#5B7C99', // embed color fallback everywhere
-  WORK_IN_DMS: true
+  WORK_IN_DMS: true,
+  NAME: (process.env.BOT_NAME || 'Lumin').trim().slice(0, 64) || 'Lumin'
 });
 
-// ── GEMMA / AI ROUTING ───────────────────────────────────────────────────────
-// ENABLE_GEMMA = true routes all standard chat through Gemma globally.
-// /search and /summary always use Gemini regardless — they need incompatible tools.
+// ── MODEL REGISTRY ───────────────────────────────────────────────────────────
+// This is the only model allowlist used by chat routing and the console API.
+// IDs were checked against Google's current Gemini API model catalogue.
 
-export const ENABLE_GEMMA            = true;
-export const GEMMA_DEFAULT_MODEL     = 'gemma-4-26b';  // key in MODELS map
-export const GEMMA_FALLBACK_MODEL    = 'gemma-4-31b';  // key in MODELS map, used when CYCLE_GEMMA_WITH_GEMINI=true
-export const CYCLE_GEMMA_WITH_GEMINI = false;          // true = append Gemma to fallback chain after all Gemini keys exhaust
+export const ENABLE_GEMMA = false;
+export const GEMMA_DEFAULT_MODEL = 'gemma-4-26b';
+export const GEMMA_FALLBACK_MODEL = 'gemma-4-31b';
+export const CYCLE_GEMMA_WITH_GEMINI = true;
 
-// ── RAG ──────────────────────────────────────────────────────────────────────
-// ENABLE_RAG = true  → auto vector-search memory before every reply once
-//                       history exceeds MEMORY_RECENT_WINDOW messages.
-// ENABLE_RAG = false → no automatic RAG; the AI uses the search_memory tool
-//                       only when it decides it actually needs old context.
-//                       Saves ~3 embed API calls per message.
-export const ENABLE_RAG = false;
+export const DEFAULT_MODEL = 'gemini-3.5-flash-lite';
 
-// ── MODELS ───────────────────────────────────────────────────────────────────
+export const MODEL_REGISTRY = Object.freeze({
+  'gemini-4-argon': Object.freeze({
+    id: 'gemini-4-argon', label: 'Gemini 4 Argon', family: 'gemini-4',
+    supportsTools: true, supportsBuiltInTools: true, supportsSafetySettings: true, supportsAttachments: true,
+  }),
+  'gemini-3.8-flash': Object.freeze({
+    id: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash', family: 'gemini-3',
+    supportsTools: true, supportsBuiltInTools: true, supportsSafetySettings: true, supportsAttachments: true,
+  }),
+  'gemini-3.5-flash-lite': Object.freeze({
+    id: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash-Lite', family: 'gemini-3',
+    supportsTools: true, supportsBuiltInTools: true, supportsSafetySettings: true, supportsAttachments: true,
+  }),
+  'gemma-4-26b': Object.freeze({
+    id: 'gemma-4-26b-a4b-it', label: 'Gemma 4 26B A4B IT', family: 'gemma-4',
+    supportsTools: true, supportsBuiltInTools: false, supportsSafetySettings: false, supportsAttachments: true,
+  }),
+  'gemma-4-31b': Object.freeze({
+    id: 'gemma-4-31b-it', label: 'Gemma 4 31B IT', family: 'gemma-4',
+    supportsTools: true, supportsBuiltInTools: false, supportsSafetySettings: false, supportsAttachments: true,
+  }),
+});
 
-export const DEFAULT_MODEL = 'gemini-3.1-flash-lite';
+export const MODELS = Object.freeze(Object.fromEntries(
+  Object.entries(MODEL_REGISTRY).map(([key, metadata]) => [key, metadata.id])
+));
+export const SUPPORTED_MODEL_IDS = Object.freeze(Object.values(MODELS));
+export const GEMINI_3_MODELS = Object.freeze(['gemini-3.8-flash', 'gemini-3.5-flash-lite']);
+export const GEMMA_MODELS = Object.freeze(['gemma-4-26b-a4b-it', 'gemma-4-31b-it']);
 
-export const MODELS = {
-  // ── Gemini 3 series ────────────────────────────────────────────────────────
-  'gemini-3.1-pro':        'gemini-3.1-pro-preview',      // most capable, agentic
-  'gemini-3.1-flash-lite': 'gemini-3.1-flash-lite', // fastest / cheapest Gemini 3
-  'gemini-3-flash':        'gemini-3-flash-preview',      // frontier-class, fraction of cost
-  'gemini-3.5-flash':      'gemini-3.5-flash',            // speed + quality balance
+export function getModelMetadata(modelName) {
+  const entry = Object.entries(MODEL_REGISTRY).find(([key, metadata]) => key === modelName || metadata.id === modelName);
+  return entry ? entry[1] : null;
+}
 
-  // ── Gemini 2.5 series ──────────────────────────────────────────────────────
-  'gemini-2.5-pro':        'gemini-2.5-pro',              // best reasoning + coding
-
-  // ── Gemma 4 (confirmed on Gemini API) ─────────────────────────────────────
-  'gemma-4-26b':           'gemma-4-26b-a4b-it',   // MoE 26B active params
-  'gemma-4-31b':           'gemma-4-31b-it',        // Dense 31B
-
-  // ── Gemma 3 (confirmed on Gemini API via AI Studio) ────────────────────────
-  'gemma-3-27b':           'gemma-3-27b-it',
-  'gemma-3-12b':           'gemma-3-12b-it',
-  'gemma-3-4b':            'gemma-3-4b-it',
-  'gemma-3-2b':            'gemma-3-2b-it',
-  'gemma-3-1b':            'gemma-3-1b-it',
-};
-
-export const GEMINI_3_MODELS = [
-  'gemini-3.1-pro-preview',
-  'gemini-3.1-flash-lite',
-  'gemini-3-flash-preview',
-];
-
-export const GEMMA_MODELS = [
-  // Gemma 4 (confirmed on Gemini API)
-  'gemma-4-26b-a4b-it',
-  'gemma-4-31b-it',
-  // Gemma 3 (confirmed on Gemini API / AI Studio)
-  'gemma-3-27b-it',
-  'gemma-3-12b-it',
-  'gemma-3-4b-it',
-  'gemma-3-2b-it',
-  'gemma-3-1b-it',
-];
-
-export const GEMMA_DAILY_LIMIT_PER_KEY     = 1500;
-export const GEMMA_SUPPORTED_MIME_PREFIXES = ['image/'];
-export const GEMMA_SUPPORTED_EXTENSIONS    = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp', '.tiff'];
+export function resolveModelId(modelName) {
+  if (typeof modelName !== 'string') return MODELS[DEFAULT_MODEL];
+  return MODELS[modelName] || (SUPPORTED_MODEL_IDS.includes(modelName) ? modelName : MODELS[DEFAULT_MODEL]);
+}
 
 export function isGemmaModel(modelName) {
-  return GEMMA_MODELS.includes(modelName) || /gemma/i.test(modelName);
+  return getModelMetadata(modelName)?.family?.startsWith('gemma') === true || /gemma/i.test(modelName || '');
 }
+
+export const GEMMA_DAILY_LIMIT_PER_KEY = 1500;
+export const GEMMA_SUPPORTED_MIME_PREFIXES = ['image/'];
+export const GEMMA_SUPPORTED_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp', '.tiff'];
 
 // ── MODEL FALLBACK & RATE LIMITS ─────────────────────────────────────────────
 
 // Models tried in order when rate limits are hit.
 export const MODEL_FALLBACK_CHAIN = [
-  'gemini-3.1-flash-lite',
-  'gemini-3.5-flash'
+  'gemini-3.5-flash-lite',
+  'gemini-3.8-flash',
+  'gemini-4-argon'
 ];
 
 // After this many successful calls on a model, proactively rotate to the next.
 export const MODEL_CALL_THRESHOLDS = {
-  'gemini-3.1-flash-lite': 500
+  'gemini-3.5-flash-lite': 500
 };
 
 export const RATE_LIMIT_ERRORS = [429, 'RESOURCE_EXHAUSTED', 'RATE_LIMIT_EXCEEDED', 'QUOTA_EXCEEDED'];
 
 // ── GENERATION CONFIG ────────────────────────────────────────────────────────
 
-const GENERATION_DEFAULTS = { TEMPERATURE: 1.0, TOP_P: 0.95 };
-
-function isGemini3Model(m) { return GEMINI_3_MODELS.includes(m); }
-
-// Gemma thinking is on/off only (no levels). Currently off — pass thinking=true to enable.
-function getGemmaConfig(thinking = false) {
-  return {
-    temperature: GENERATION_DEFAULTS.TEMPERATURE,
-    topP:        GENERATION_DEFAULTS.TOP_P,
-    ...(thinking ? { thinkingConfig: { thinkingLevel: 'high' } } : {})
-  };
-}
-
-// Thinking disabled for Gemini 3 — allows tool use (thinking + tools conflict in preview).
-function getGemini3Config() {
-  return {
-    temperature: GENERATION_DEFAULTS.TEMPERATURE,
-    topP:        GENERATION_DEFAULTS.TOP_P,
-    // thinkingConfig: { thinkingLevel: 'low' } // uncomment to enable thinking (breaks tool use)
-  };
-}
-
-// Thinking disabled for Gemini 2 — same reason as above.
-function getGemini2Config() {
-  return {
-    temperature: GENERATION_DEFAULTS.TEMPERATURE,
-    topP:        GENERATION_DEFAULTS.TOP_P,
-    // thinkingConfig: { thinkingBudget: -1 } // uncomment to enable dynamic thinking (breaks tool use)
-  };
-}
+const GENERATION_DEFAULTS = Object.freeze({ TEMPERATURE: 0.8, TOP_P: 0.95 });
 
 export function getGenerationConfig(modelName) {
-  if (isGemmaModel(modelName))   return getGemmaConfig();
-  if (isGemini3Model(modelName)) return getGemini3Config();
-  return getGemini2Config();
+  const metadata = getModelMetadata(modelName);
+  return {
+    temperature: GENERATION_DEFAULTS.TEMPERATURE,
+    topP: GENERATION_DEFAULTS.TOP_P,
+    // Keep provider-specific experimental fields out of the shared config until
+    // a model capability adapter explicitly verifies support.
+  };
 }
 
-export const generationConfig = getGenerationConfig('gemini-3-flash-preview');
+export const generationConfig = getGenerationConfig(DEFAULT_MODEL);
 
-// ── SAFETY SETTINGS ──────────────────────────────────────────────────────────
+const SAFETY_CATEGORY_MAP = Object.freeze({
+  harassment: HarmCategory.HARM_CATEGORY_HARASSMENT,
+  hateSpeech: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+  sexualContent: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+  dangerousContent: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+  civicIntegrity: HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY,
+  jailbreak: HarmCategory.HARM_CATEGORY_JAILBREAK,
+});
 
-export const safetySettings = [
-  { category: HarmCategory.HARM_CATEGORY_HARASSMENT,        threshold: HarmBlockThreshold.BLOCK_NONE },
-  { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,       threshold: HarmBlockThreshold.BLOCK_NONE },
-  { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
-  { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-  { category: HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY,   threshold: HarmBlockThreshold.BLOCK_NONE },
-];
+// BALANCED is the default safety posture. Include only categories actually
+// exposed by the installed SDK/provider, and never silently configure a
+// category that a selected model does not support.
+const DEFAULT_SAFETY_VALUES = Object.freeze({
+  harassment: 'BLOCK_MEDIUM_AND_ABOVE',
+  hateSpeech: 'BLOCK_MEDIUM_AND_ABOVE',
+  sexualContent: 'BLOCK_MEDIUM_AND_ABOVE',
+  dangerousContent: 'BLOCK_MEDIUM_AND_ABOVE',
+  civicIntegrity: 'BLOCK_MEDIUM_AND_ABOVE',
+  jailbreak: 'BLOCK_MEDIUM_AND_ABOVE',
+});
+export const DEFAULT_SAFETY_THRESHOLDS = Object.freeze(Object.fromEntries(
+  Object.entries(DEFAULT_SAFETY_VALUES).filter(([category]) => SAFETY_CATEGORY_MAP[category] != null)
+));
+let runtimeSafetyThresholds = { ...DEFAULT_SAFETY_THRESHOLDS };
+const VALID_THRESHOLDS = new Set(['BLOCK_NONE', 'BLOCK_ONLY_HIGH', 'BLOCK_MEDIUM_AND_ABOVE', 'BLOCK_LOW_AND_ABOVE', 'OFF']);
+
+export function setSafetyThresholdOverrides(overrides = {}) {
+  if (!overrides || typeof overrides !== 'object' || Array.isArray(overrides)) throw new TypeError('Safety thresholds must be an object');
+  // Treat each call as a complete replacement over safe defaults. This makes
+  // omitted categories reset predictably instead of retaining stale overrides.
+  const next = { ...DEFAULT_SAFETY_THRESHOLDS };
+  for (const [category, threshold] of Object.entries(overrides)) {
+    if (!(category in SAFETY_CATEGORY_MAP) || SAFETY_CATEGORY_MAP[category] == null) throw new TypeError(`Unsupported safety category: ${category}`);
+    if (threshold === null || threshold === '') { next[category] = DEFAULT_SAFETY_THRESHOLDS[category]; continue; }
+    if (!VALID_THRESHOLDS.has(threshold)) throw new TypeError(`Unsupported threshold for ${category}`);
+    if (HarmBlockThreshold[threshold] === undefined) throw new TypeError(`Threshold ${threshold} is unsupported by the installed Google GenAI SDK.`);
+    next[category] = threshold;
+  }
+  runtimeSafetyThresholds = next;
+  return getSafetyThresholds();
+}
+
+export function getSafetyThresholds() {
+  return { ...runtimeSafetyThresholds };
+}
+
+export function getSafetySettings(modelName = DEFAULT_MODEL) {
+  const metadata = getModelMetadata(modelName);
+  if (metadata && !metadata.supportsSafetySettings) return [];
+  return Object.entries(SAFETY_CATEGORY_MAP).filter(([, category]) => category != null).map(([key, category]) => ({
+    category,
+    threshold: (() => {
+      const resolved = HarmBlockThreshold[runtimeSafetyThresholds[key]];
+      if (resolved === undefined) throw new TypeError(`Safety threshold ${runtimeSafetyThresholds[key]} is unsupported by the installed Google GenAI SDK.`);
+      return resolved;
+    })(),
+  }));
+}
+
+export const safetySettings = getSafetySettings(DEFAULT_MODEL);
 
 // ── QUEUE & MEDIA ────────────────────────────────────────────────────────────
 
@@ -149,16 +167,16 @@ export const RAM_MEDIA_SUSPEND_THRESHOLD_MB = 380;   // suspend all media above 
 export const KEY_SWITCH_HOLD_MS             = 1500;  // ms to wait after rotating API key
 export const MAX_QUEUE_DEPTH_PER_USER       = 5;     // messages beyond this are dropped with a warning
 export const PDF_ENABLED_FOR_GEMINI         = false; // disabled to save RAM and quota
-export const CACHE_ENABLED                  = false; // Redis L3 cache; in-memory L1/L2 always on
-export const WEEKLY_SUMMARY_ENABLED         = true;  // set false to skip weekly context summary job entirely
+export const CACHE_ENABLED                  = false; // Heavy application-level caches are disabled by default
+export const WEEKLY_SUMMARY_ENABLED         = false; // automatic weekly memory summaries are disabled; explicit summary features remain available
 export const CROSS_CONTEXT_ENABLED          = false; // global default; overridden per-user via userSettings
 
 // ── MEDIA PROCESSING ─────────────────────────────────────────────────────────
 // Individual toggles — set false to reject that media type before it hits the AI.
 // RAM_MEDIA_SUSPEND_THRESHOLD_MB is the global kill-switch; these are per-type.
-export const ENABLE_IMAGE_PROCESSING = true;   // inline images (png/jpeg)
-export const ENABLE_VIDEO_PROCESSING = false;  // video attachments (mp4/mov)
-export const ENABLE_AUDIO_PROCESSING = false;  // audio attachments (mp3/wav)
+export const ENABLE_IMAGE_PROCESSING = true;    // available only after explicit per-user attachment grant
+export const ENABLE_VIDEO_PROCESSING = true;   // available only after explicit per-user attachment grant
+export const ENABLE_AUDIO_PROCESSING = true;   // available only after explicit per-user attachment grant
 export const ENABLE_FILE_PROCESSING  = false;  // generic file attachments
 export const ENABLE_WEB_SEARCH       = true;   // Gemini grounding / web search tool
 export const ENABLE_FUNCTION_CALLING = true;   // all tool / function-call use
@@ -212,92 +230,6 @@ export const DB_RETRY_CONFIG = Object.freeze({
   MAX_DELAY_MS:  5_000
 });
 
-export const DB_VECTOR_SEARCH_CONFIG = Object.freeze({
-  INDEX_NAME:                'vector_index',
-  PATH:                      'embedding',
-  NUM_CANDIDATES_MULTIPLIER: 10,
-  DEFAULT_LIMIT:             4,
-  SCORE_THRESHOLD:           0.72
-});
-
-// ── MEMORY SYSTEM ────────────────────────────────────────────────────────────
-
-export const MEMORY_RECENT_WINDOW   = 10;    // messages kept in live context, not indexed
-export const MEMORY_MAX_RAG_RESULTS = 3;     // max vector hits injected per prompt
-export const MEMORY_SCORE_THRESHOLD = 0.72;  // min similarity to include a RAG result
-export const MEMORY_TIME_GAP_MS     = 30_000;  // gap that inserts a TIME ELAPSED marker (display only)
-export const MEMORY_RAG_CUTOFF_MS   = 300_000; // 5 min — RAG dedup: exclude memories more recent than this
-export const MEMORY_MAX_INLINE_CTX  = 6_000; // raised from 1500 — truncate gracefully instead of dropping
-
-// ── MEMORY CACHE ─────────────────────────────────────────────────────────────
-
-export const MEMORY_CACHE_TTL_MS        = 2 * 60 * 1000;
-export const MEMORY_CACHE_MAX_SIZE      = 200;
-export const MEMORY_CACHE_MIN_QUERY_LEN = 10;
-export const MEMORY_CACHE_SEMANTIC_SIM  = 0.92; // min cosine similarity for a cache hit
-
-// ── MEMORY STORE ─────────────────────────────────────────────────────────────
-
-export const MEMORY_CHUNK_SIZE            = 8;
-export const MEMORY_CHUNK_OVERLAP         = 2;
-export const MEMORY_INDEX_BATCH_SIZE      = 3;  // parallel embedding calls per indexing cycle
-export const MEMORY_PERSONAL_CACHE_TTL_MS = 5 * 60 * 1000;
-
-// ── CLUSTER ENGINE ───────────────────────────────────────────────────────────
-// RAM budget: 300 embeddings × 12 KB × 15 users ≈ 54 MB. Don't raise CLUSTER_SAMPLE without checking RAM.
-
-export const CLUSTER_MAX                  = 20;
-export const CLUSTER_NUM_BASELINE         = 5;
-export const CLUSTER_MIN_MEMORIES         = 30;   // was 150 — clustering now activates much earlier
-export const CLUSTER_TOP_TO_SEARCH        = 2;
-export const CLUSTER_MIN_SIMILARITY       = 0.45;
-export const CLUSTER_REINDEX_INTERVAL     = 150;
-export const CLUSTER_MAX_KMEANS_ITERS     = 10;
-export const CLUSTER_CONVERGENCE_THRESHOLD = 0.001;
-export const CLUSTER_CACHE_TTL_MS         = 15 * 60 * 1000;
-export const CLUSTER_MAX_PER_CLUSTER      = 8;
-export const CLUSTER_EMBEDDINGS_TTL_MS    = 2 * 60 * 1000;
-
-export const CLUSTER_EMBEDDING_LIMITS = Object.freeze({
-  CLUSTER_SAMPLE:       300,
-  CLUSTER_TIME_BUCKETS: 6,
-  FALLBACK_SEARCH:      30  // used when $vectorSearch index is unavailable
-});
-
-// ── EMBEDDING SERVICE ────────────────────────────────────────────────────────
-
-export const EMBEDDING_MODEL            = 'gemini-embedding-2';
-export const EMBEDDING_CACHE_MAX_SIZE   = 50;
-export const EMBEDDING_MAX_CONCURRENT   = 3;
-export const EMBEDDING_DIM              = 768;
-export const EMBEDDING_MRL_SHORT_DIM    = 256;  // truncated dim for fast centroid search
-export const EMBEDDING_MRL_CENTROID_DIM = 64;   // truncated dim for K-means first pass
-export const EMBEDDING_REDIS_TTL        = 24 * 60 * 60; // 24h; embeddings are deterministic
-export const EMBEDDING_REDIS_PREFIX     = 'lumin:emb:';
-
-// PDF/video/audio embedding disabled — not needed and saves quota
-export const EMBEDDING_ENABLE_PDF   = false;
-export const EMBEDDING_ENABLE_VIDEO = false;
-export const EMBEDDING_ENABLE_AUDIO = false;
-
-export const EMBEDDING_IMAGE_LIMIT = Object.freeze({
-  MAX_COUNT:  6,
-  MIME_TYPES: new Set(['image/png', 'image/jpeg'])
-});
-
-export const EMBEDDING_PDF_LIMIT = Object.freeze({
-  MAX_COUNT: 1, MAX_PAGES: 6, MIME_TYPE: 'application/pdf'
-});
-
-export const EMBEDDING_VIDEO_LIMIT = Object.freeze({
-  MAX_COUNT: 1, MAX_SECONDS: 120, WITH_AUDIO_MAX_SECONDS: 80,
-  MIME_TYPES: new Set(['video/mp4', 'video/quicktime'])
-});
-
-export const EMBEDDING_AUDIO_LIMIT = Object.freeze({
-  MAX_COUNT: 1, MAX_SECONDS: 80,
-  MIME_TYPES: new Set(['audio/mpeg', 'audio/wav', 'audio/x-wav'])
-});
 
 // ── UTILS ────────────────────────────────────────────────────────────────────
 
@@ -318,31 +250,17 @@ export const MESSAGE_FETCH_CONFIG = Object.freeze({
 export default {
   BOT_CONFIG,
   ENABLE_GEMMA, GEMMA_DEFAULT_MODEL, GEMMA_FALLBACK_MODEL, CYCLE_GEMMA_WITH_GEMINI,
-  ENABLE_RAG,
-  DEFAULT_MODEL, MODELS, GEMINI_3_MODELS, GEMMA_MODELS,
+  DEFAULT_MODEL, MODELS, MODEL_REGISTRY, SUPPORTED_MODEL_IDS, GEMINI_3_MODELS, GEMMA_MODELS,
   GEMMA_DAILY_LIMIT_PER_KEY, GEMMA_SUPPORTED_MIME_PREFIXES, GEMMA_SUPPORTED_EXTENSIONS,
-  isGemmaModel,
+  isGemmaModel, getModelMetadata, resolveModelId,
   MODEL_FALLBACK_CHAIN, MODEL_CALL_THRESHOLDS, RATE_LIMIT_ERRORS,
   getGenerationConfig, generationConfig,
-  safetySettings,
+  safetySettings, getSafetySettings, getSafetyThresholds, setSafetyThresholdOverrides,
   RAM_MEDIA_SUSPEND_THRESHOLD_MB, KEY_SWITCH_HOLD_MS, MAX_QUEUE_DEPTH_PER_USER,
   PDF_ENABLED_FOR_GEMINI, CACHE_ENABLED, WEEKLY_SUMMARY_ENABLED,
   ENABLE_IMAGE_PROCESSING, ENABLE_VIDEO_PROCESSING, ENABLE_AUDIO_PROCESSING,
   ENABLE_FILE_PROCESSING, ENABLE_WEB_SEARCH, ENABLE_FUNCTION_CALLING,
   STATE_CONFIG, RESOURCE_CONFIG, MIGRATION_CONFIG, POLL_CONFIG,
-  DB_CONNECTION_CONFIG, DB_RETRY_CONFIG, DB_VECTOR_SEARCH_CONFIG,
-  MEMORY_RECENT_WINDOW, MEMORY_MAX_RAG_RESULTS, MEMORY_SCORE_THRESHOLD,
-  MEMORY_TIME_GAP_MS, MEMORY_RAG_CUTOFF_MS, MEMORY_MAX_INLINE_CTX,
-  MEMORY_CACHE_TTL_MS, MEMORY_CACHE_MAX_SIZE, MEMORY_CACHE_MIN_QUERY_LEN, MEMORY_CACHE_SEMANTIC_SIM,
-  MEMORY_CHUNK_SIZE, MEMORY_CHUNK_OVERLAP, MEMORY_INDEX_BATCH_SIZE, MEMORY_PERSONAL_CACHE_TTL_MS,
-  CLUSTER_MAX, CLUSTER_NUM_BASELINE, CLUSTER_MIN_MEMORIES, CLUSTER_TOP_TO_SEARCH,
-  CLUSTER_MIN_SIMILARITY, CLUSTER_REINDEX_INTERVAL, CLUSTER_MAX_KMEANS_ITERS,
-  CLUSTER_CONVERGENCE_THRESHOLD, CLUSTER_CACHE_TTL_MS, CLUSTER_MAX_PER_CLUSTER,
-  CLUSTER_EMBEDDINGS_TTL_MS, CLUSTER_EMBEDDING_LIMITS,
-  EMBEDDING_MODEL, EMBEDDING_CACHE_MAX_SIZE, EMBEDDING_MAX_CONCURRENT,
-  EMBEDDING_DIM, EMBEDDING_MRL_SHORT_DIM, EMBEDDING_MRL_CENTROID_DIM,
-  EMBEDDING_REDIS_TTL, EMBEDDING_REDIS_PREFIX,
-  EMBEDDING_ENABLE_PDF, EMBEDDING_ENABLE_VIDEO, EMBEDDING_ENABLE_AUDIO,
-  EMBEDDING_IMAGE_LIMIT, EMBEDDING_PDF_LIMIT, EMBEDDING_VIDEO_LIMIT, EMBEDDING_AUDIO_LIMIT,
+  DB_CONNECTION_CONFIG, DB_RETRY_CONFIG,
   UPLOAD_CONFIG, MESSAGE_FETCH_CONFIG
 };

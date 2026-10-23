@@ -13,7 +13,6 @@ import { parseRelativeTime }         from '../../utils.js';
 import { formatDuration }            from '../shared/messageFormatter.js';
 import { Logger }                    from '../../core/Logger.js';
 import { FUNCTION_NAMES, MEMORY_ACTIONS } from './FunctionRegistry.js';
-import { vectorSearchOldSessions, getRecentSessionContext } from '../../commands/summary/SessionSummaryJob.js';
 import { setPendingSticker, setPendingGif, getLastBotMessage } from './pendingMedia.js';
 import { isGemmaModel }                  from '../config.js';
 import axios                             from 'axios';
@@ -207,62 +206,23 @@ async function handleManageServerFact(guildId, action, info, category = 'general
 }
 
 async function handleSearchMemory(userId, guildId, historyId, query) {
-  const crossContextEnabled = state.userSettings?.[userId]?.crossContextEnabled ?? false;
-  let otherGuildIds = [];
-  if (crossContextEnabled && userId) {
-    try {
-      otherGuildIds = client.guilds.cache
-        .filter(g => g.members.cache.has(userId) && g.id !== guildId)
-        .map(g => g.id);
-    } catch { /* non-fatal */ }
-  }
-
-  const { embeddingService } = await import('../../memory/EmbeddingService.js');
-
-  // Start searchMemory immediately — Phase 1 (non-embedding DB queries) and
-  // Phase 2 (embedding generation) run concurrently inside it already.
-  // generateEmbedding here shares the same in-flight request via EmbeddingService
-  // dedup cache — zero extra API cost, both resolve together.
-  const [results, queryEmbedding] = await Promise.all([
-    memorySystem.searchMemory(userId, guildId, historyId, query, { crossContextEnabled, otherGuildIds }),
-    embeddingService.generateEmbedding(query, 'RETRIEVAL_QUERY').catch(() => null),
-  ]);
-
-  // Session context — fast DB read (~20 ms). Embedding is fully resolved above
-  // so cosine ranking is applied; no sequential wait during the main search.
-  const sessionLines = await getRecentSessionContext(userId, queryEmbedding, 3);
-
-  const all = [...sessionLines, ...results];
-  return { result: all.length > 0 ? all.join('\n') : MSG.NO_MEMORIES_FOUND };
+  const targetHistoryId = historyId || guildId || userId;
+  const matches = await memorySystem.searchConversationHistory(targetHistoryId, query, { limit: 4 });
+  const lines = matches.map(item => {
+    const when = item.timestamp ? new Date(item.timestamp).toLocaleString() : 'time unknown';
+    return `[${item.role} · ${when}] ${item.text}`;
+  });
+  return { result: lines.length ? lines.join('\n') : MSG.NO_MEMORIES_FOUND };
 }
 
 async function handleCheckSessions(userId, guildId, historyId, query) {
-  // Generate embedding — same reuse pattern; no second embed if called after search_memory
-  const { embeddingService } = await import('../../memory/EmbeddingService.js');
-  const queryEmbedding = await embeddingService
-    .generateEmbedding(query, 'RETRIEVAL_QUERY')
-    .catch(() => null);
-
-  if (!queryEmbedding) {
-    return { result: 'Unable to search sessions: embedding unavailable.' };
-  }
-
-  // Run check_sessions (old) + search_memory (recent) in true parallel
-  const [oldSessions, recentLines] = await Promise.all([
-    vectorSearchOldSessions(userId, queryEmbedding, 5),
-    getRecentSessionContext(userId, queryEmbedding, 3)
-  ]);
-
-  const lines = [];
-
-  for (const s of recentLines) lines.push(s);
-
-  for (const s of oldSessions) {
-    const age = Math.floor((Date.now() - s.timestamp) / 86_400_000);
-    lines.push(`[Session — ${age}d ago] ${s.text}`);
-  }
-
-  return { result: lines.length > 0 ? lines.join('\n\n') : 'No matching sessions found.' };
+  const targetHistoryId = historyId || guildId || userId;
+  const matches = await memorySystem.searchConversationHistory(targetHistoryId, query, { limit: 8 });
+  if (!matches.length) return { result: 'No matching saved messages were found in this conversation.' };
+  return { result: matches.map(item => {
+    const when = item.timestamp ? new Date(item.timestamp).toLocaleString() : 'time unknown';
+    return `[${item.role} · ${when}] ${item.text}`;
+  }).join('\n\n') };
 }
 
 // ── Scheduling ────────────────────────────────────────────────────────────────
@@ -313,24 +273,19 @@ async function handleCheckTimeElapsed(historyId, userId, guildId) {
 async function handleGetMessageTimestamp(userId, guildId, historyId, query) {
   try {
     const targetId = historyId || guildId || userId;
-    const { embeddingService } = await import('../../memory/EmbeddingService.js');
-    const { findSimilarMemories } = await import('../../database/vectorSearch.js');
-    const queryEmbedding = await embeddingService.generateEmbedding(query, 'RETRIEVAL_QUERY');
-    if (!queryEmbedding) return { result: 'Could not generate embedding for timestamp search.' };
-    const results = await findSimilarMemories(targetId, queryEmbedding, 1);
-    if (!results?.length) return { result: 'No matching message found in memory.' };
-    const entry = results[0];
-    if (!entry.timestamp) return { result: 'Message found but timestamp not recorded.' };
-    const date      = new Date(entry.timestamp);
+    const entry = await memorySystem.findHistoryMessage(targetId, query);
+    if (!entry) return { result: 'No matching saved message found in this conversation.' };
+    if (!entry.timestamp) return { result: 'A matching message was found, but its timestamp was not recorded.' };
+    const date = new Date(entry.timestamp);
     const formatted = date.toLocaleString('en-US', {
-      weekday: 'long', year: 'numeric', month: 'long',
-      day: 'numeric', hour: '2-digit', minute: '2-digit', timeZoneName: 'short'
+      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+      hour: '2-digit', minute: '2-digit', timeZoneName: 'short'
     });
-    const snippet = entry.text ? ` (about: "${entry.text.slice(0, 80)}...")` : '';
+    const snippet = entry.text ? ` (about: "${entry.text.slice(0, 80)}${entry.text.length > 80 ? '…' : ''}")` : '';
     return { result: `That message was sent on: ${formatted}${snippet}` };
   } catch (error) {
     logger.error('Error getting message timestamp', error);
-    return { result: `${MSG.OPERATION_FAILED}: ${error.message}` };
+    return { result: `${MSG.OPERATION_FAILED}: The saved-message search failed.` };
   }
 }
 
@@ -1768,10 +1723,10 @@ async function handleSearchGiphySticker(query, historyId) {
 
 async function handleGoogleSearch(query) {
   try {
-    const { MODELS, GEMMA_DEFAULT_MODEL, getGenerationConfig, safetySettings } = await import('../config.js');
+    const { MODELS, GEMMA_DEFAULT_MODEL, getGenerationConfig, getSafetySettings } = await import('../config.js');
 
     const searchFallbackChain = [
-      MODELS['gemini-3.1-flash-lite'] ?? 'gemini-3.1-flash-lite',
+      MODELS['gemini-3.5-flash-lite'] ?? 'gemini-3.5-flash-lite',
       MODELS[GEMMA_DEFAULT_MODEL]     ?? 'gemma-4-26b-a4b-it'
     ];
 
@@ -1789,7 +1744,7 @@ async function handleGoogleSearch(query) {
           contents: [{ role: 'user', parts: [{ text: `Search the web for: ${query}` }] }],
           config: {
             ...getGenerationConfig(searchModel),
-            safetySettings,
+            safetySettings: getSafetySettings(searchModel),
             tools: [{ googleSearch: {} }],
             systemInstruction
           }

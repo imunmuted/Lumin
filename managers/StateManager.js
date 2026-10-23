@@ -19,6 +19,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 import * as db from '../database.js';
+import { getCollection, COLLECTIONS } from '../database/connection.js';
 import { Logger } from '../core/Logger.js';
 import { formatDuration } from '../modules/shared/messageFormatter.js';
 import {
@@ -31,7 +32,7 @@ import {
 } from './QueueManager.js';
 import {
   DEFAULT_MODEL, BOT_CONFIG, STATE_CONFIG,
-  MIGRATION_CONFIG, POLL_CONFIG
+  MIGRATION_CONFIG, POLL_CONFIG, SUPPORTED_MODEL_IDS
 } from './config.js';
 
 const logger = Logger.get('StateManager');
@@ -70,6 +71,82 @@ export const DEFAULT_USER_SETTINGS = Object.freeze({
   gemmaEnabled:       false,
   crossContextEnabled: false
 });
+
+let userDefaultOverrides = {};
+let serverDefaultOverrides = {};
+
+function validateDefaultOverrides(values, schema, label) {
+  if (!values || typeof values !== 'object' || Array.isArray(values)) throw new TypeError(`${label} defaults must be an object.`);
+  const output = {};
+  for (const [key, value] of Object.entries(values)) {
+    if (!Object.hasOwn(schema, key)) throw new TypeError(`Unsupported ${label} default field: ${key}`);
+    if (key === 'customPersonality') {
+      if (value !== null && (typeof value !== 'string' || value.length > 4_000)) throw new TypeError(`${label}.${key} must be null or a string up to 4000 characters.`);
+    } else if (key === 'selectedModel') {
+      if (typeof value !== 'string' || value.length > 100 || !SUPPORTED_MODEL_IDS.includes(value)) throw new TypeError(`${label}.${key} must be a registered model ID.`);
+    } else if (Array.isArray(schema[key])) {
+      if (!Array.isArray(value) || value.length > 500 || value.some(item => typeof item !== 'string' || item.length > 100)) throw new TypeError(`${label}.${key} must be a string array with at most 500 entries.`);
+      output[key] = [...new Set(value)];
+      continue;
+    } else if (schema[key] !== null && typeof value !== typeof schema[key]) {
+      throw new TypeError(`${label}.${key} must be ${typeof schema[key]}.`);
+    } else if (schema[key] === null && value !== null && typeof value !== 'string') {
+      throw new TypeError(`${label}.${key} must be null or a string.`);
+    }
+    if (key === 'embedColor' && (typeof value !== 'string' || !/^#[0-9A-Fa-f]{6}$/.test(value))) throw new TypeError(`${label}.embedColor must be #RRGGBB.`);
+    if (key === 'responseFormat' && !['Normal', 'Embedded'].includes(value)) throw new TypeError(`${label}.responseFormat must be Normal or Embedded.`);
+    if (key === 'selectedModel' && !/^[A-Za-z0-9._:-]+$/.test(value)) throw new TypeError(`${label}.selectedModel contains invalid characters.`);
+    output[key] = value;
+  }
+  return output;
+}
+
+/** Configure defaults used for new records and absent preference fallbacks. */
+export function configureSettingDefaults({ users = {}, servers = {} } = {}) {
+  userDefaultOverrides = validateDefaultOverrides(users, DEFAULT_USER_SETTINGS, 'users');
+  serverDefaultOverrides = validateDefaultOverrides(servers, DEFAULT_SERVER_SETTINGS, 'servers');
+  return getSettingDefaults();
+}
+
+export function getDefaultUserSettings() {
+  const result = { ...DEFAULT_USER_SETTINGS, ...userDefaultOverrides };
+  if (Array.isArray(result.allowedChannels)) result.allowedChannels = [...result.allowedChannels];
+  return result;
+}
+
+export function getDefaultServerSettings() {
+  const result = { ...DEFAULT_SERVER_SETTINGS, ...serverDefaultOverrides };
+  if (Array.isArray(result.allowedChannels)) result.allowedChannels = [...result.allowedChannels];
+  return result;
+}
+
+export function getSettingDefaults() {
+  return { users: { ...userDefaultOverrides }, servers: { ...serverDefaultOverrides } };
+}
+
+export async function loadSettingDefaultsFromDB() {
+  try {
+    const saved = await getCollection('settingDefaults').findOne({ _id: 'active' });
+    if (saved) configureSettingDefaults({ users: saved.users || {}, servers: saved.servers || {} });
+  } catch (error) {
+    logger.warn(`Setting-default overrides unavailable; compiled defaults remain active (${error.message})`);
+  }
+  return getSettingDefaults();
+}
+
+export async function saveSettingDefaultsToDB(overrides) {
+  const safe = {
+    users: validateDefaultOverrides(overrides?.users || {}, DEFAULT_USER_SETTINGS, 'users'),
+    servers: validateDefaultOverrides(overrides?.servers || {}, DEFAULT_SERVER_SETTINGS, 'servers'),
+  };
+  await getCollection('settingDefaults').replaceOne(
+    { _id: 'active' },
+    { _id: 'active', ...safe, updatedAt: new Date() },
+    { upsert: true },
+  );
+  configureSettingDefaults(safe);
+  return safe;
+}
 
 // POLL_CONFIG, MIGRATION_CONFIG, STATE_CONFIG imported from ./config.js — do not redefine here.
 
@@ -380,6 +457,8 @@ export async function saveStateToFile() {
 export async function loadStateFromDB(tempDir) {
   try {
     await fs.mkdir(tempDir, { recursive: true });
+
+    await loadSettingDefaultsFromDB();
 
     // L-9 fix: DON'T load all chat histories at startup.
     // They are loaded lazily on first message (see getHistory / updateChatHistory).
@@ -708,7 +787,7 @@ export function initializeBlacklistForGuild(guildId) {
     }
 
     if (!state.serverSettings[guildId]) {
-      state.serverSettings[guildId] = { ...DEFAULT_SERVER_SETTINGS };
+      state.serverSettings[guildId] = getDefaultServerSettings();
     } else {
       // Back-fill any fields that were added after the guild was originally stored.
       if (!state.serverSettings[guildId].allowedChannels) {
@@ -855,13 +934,10 @@ async function migrateAllServerSettings({ fields = null, force = false } = {}) {
           }
         } else if (force) {
           // Force-all mode: full default overwrite, then re-apply existing non-default fields
-          updated = { ...DEFAULT_SERVER_SETTINGS, ...existing };
-          // Reset selectedModel to default (original behaviour)
-          updated.selectedModel = DEFAULT_SERVER_SETTINGS.selectedModel;
+          updated = { ...getDefaultServerSettings(), ...existing };
         } else {
           // Default mode: fill in any missing fields only
-          updated = { ...DEFAULT_SERVER_SETTINGS, ...existing };
-          updated.selectedModel = DEFAULT_SERVER_SETTINGS.selectedModel;
+          updated = { ...getDefaultServerSettings(), ...existing };
         }
 
         await db.saveServerSettings(guildId, updated);
@@ -914,11 +990,9 @@ async function migrateAllUserSettings({ fields = null, force = false } = {}) {
             }
           }
         } else if (force) {
-          updated = { ...DEFAULT_USER_SETTINGS, ...existing };
-          updated.selectedModel = DEFAULT_USER_SETTINGS.selectedModel;
+          updated = { ...getDefaultUserSettings(), ...existing };
         } else {
-          updated = { ...DEFAULT_USER_SETTINGS, ...existing };
-          updated.selectedModel = DEFAULT_USER_SETTINGS.selectedModel;
+          updated = { ...getDefaultUserSettings(), ...existing };
         }
 
         await db.saveUserSettings(userId, updated);

@@ -1,17 +1,12 @@
 /**
  * @fileoverview Chat history persistence — saves per-message or batch turns to DB
- *               and triggers background memory indexing.
+ *               to MongoDB. Long-term memory indexing is deliberately disabled.
  * @module modules/message/HistoryManager
  */
 
 import { getHistoryLock, updateChatHistory, state } from '../../managers/BotManager.js';
 import * as db        from '../../database.js';
-import { memorySystem } from '../../memory/MemorySystem.js';
 import { Logger }      from '../../core/Logger.js';
-import {
-  incrementBotMsgCounter,
-  maybeGenerateSessionSummary
-} from '../../commands/summary/SessionSummaryJob.js';
 
 const logger = Logger.get('HistoryManager');
 
@@ -113,33 +108,23 @@ export async function saveMessageHistory({
         );
       }
 
-      // Background: index the new turn into the vector memory system
-      memorySystem
-        .storeMemoryWithEmbedding(historyId, newHistory, userId, guildId)
-        .catch(err => logger.error('Background memory indexing failed', err));
+      // Chat history is the sole automatic conversational context store.
 
-      // Session summary: increment bot counter and maybe generate a summary window
-      const containsBotMsg = newHistory.some(m => m.role === 'assistant');
-      if (containsBotMsg) {
-        incrementBotMsgCounter(userId, historyId);
-        maybeGenerateSessionSummary(userId, historyId, guildId, async () => {
-          const raw = state.chatHistories[historyId];
-          if (!raw) return [];
-          const msgs = [];
-          for (const key of Object.keys(raw)) {
-            const entries = raw[key];
-            if (Array.isArray(entries)) for (const m of entries) msgs.push(m);
-          }
-          msgs.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
-          return msgs;
-        });
-      }
+      // Automatic session-memory summarization is disabled. Persistent history
+      // is the context source; future memory work plugs in behind MemorySystem.
 
       // L-7 fix: guard against saving undefined history (uninitialized historyId)
       const historyToSave = state.chatHistories[historyId];
       if (historyToSave) {
-        db.saveChatHistory(historyId, historyToSave)
-          .catch(err => logger.error(`Failed to save chat history for ${historyId}`, err));
+        try {
+          // Await the targeted write while the per-history lock is held. This
+          // prevents a later turn from racing and overwriting a newer snapshot.
+          await db.saveChatHistory(historyId, historyToSave);
+        } catch (err) {
+          // Keep the bot responsive during a database outage; the failure is
+          // visible in logs, and the next turn can retry persisting the state.
+          logger.error(`Failed to save chat history for ${historyId}`, err);
+        }
       }
 
     } catch (err) {

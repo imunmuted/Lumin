@@ -12,7 +12,7 @@
  *
  * Usage:
  *   import { RateLimitError, FilePermissionError } from '../core/AppError.js';
- *   throw new RateLimitError('gemini-2.0-flash', 'Key 2');
+ *   throw new RateLimitError('gemini-3.5-flash-lite', 'Key 2');
  */
 
 // ============================================================================
@@ -108,7 +108,7 @@ export class LuminError extends Error {
  * @extends LuminError
  *
  * @example
- *   throw new RateLimitError('gemini-2.0-flash', 'Key 3');
+ *   throw new RateLimitError('gemini-3.5-flash-lite', 'Key 3');
  */
 export class RateLimitError extends LuminError {
   /**
@@ -374,7 +374,7 @@ export class AttachmentError extends LuminError {
  *   try {
  *     await genAI.models.generateContent(request);
  *   } catch (err) {
- *     throw classifyApiError(err, 'gemini-2.0-flash', 'Key 1');
+ *     throw classifyApiError(err, 'gemini-3.5-flash-lite', 'Key 1');
  *   }
  */
 export function classifyApiError(rawError, modelName = '', keyLabel = '', fileUri = '') {

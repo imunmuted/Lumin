@@ -250,7 +250,7 @@ export async function extractFileText(message, messageContent) {
  *   timestamp:       number
  * }>}
  */
-export async function prepareMessageContent(message) {
+export async function prepareMessageContent(message, { allowAttachments = false } = {}) {
   // M-1 fix: use module-level cached regex instead of rebuilding on every message
   const botMentionRe = getBotMentionRegex();
 
@@ -295,8 +295,10 @@ export async function prepareMessageContent(message) {
         }
 
         if (repliedMsg.attachments.size > 0) {
-          repliedAttachments = Array.from(repliedMsg.attachments.values())
-            .map(a => ({ ...a, sourceContext: 'replied_message' }));
+          if (allowAttachments) {
+            repliedAttachments = Array.from(repliedMsg.attachments.values())
+              .map(a => ({ ...a, sourceContext: 'replied_message' }));
+          }
           ctx += `[Contains ${repliedMsg.attachments.size} attachment(s)]\n`;
         }
 
@@ -307,7 +309,7 @@ export async function prepareMessageContent(message) {
           ctx += `[Forwarded message]:\n${rft}\n`;
           if (rfa.length) ctx += `[Contains ${rfa.length} forwarded attachment(s)]\n`;
         }
-        if (rfa.length) {
+        if (allowAttachments && rfa.length) {
           repliedAttachments = [
             ...repliedAttachments,
             ...rfa.map(a => ({ ...a, sourceContext: 'replied_message_forwarded' }))
@@ -327,7 +329,9 @@ export async function prepareMessageContent(message) {
   }
 
   // ── GIF links ──────────────────────────────────────────────────────────────
-  const gifResult = await processGifLinks(messageContent, message, resolveAllMentions);
+  const gifResult = allowAttachments
+    ? await processGifLinks(messageContent, message, resolveAllMentions)
+    : { messageContent, gifLinkAttachments: [] };
   messageContent  = gifResult.messageContent;
   const gifLinkAttachments = gifResult.gifLinkAttachments;
 
@@ -342,42 +346,38 @@ export async function prepareMessageContent(message) {
     }
   }
 
-  const taggedForwardedAttachments = forwardedAttachments.map(a => ({
+  const taggedForwardedAttachments = (allowAttachments ? forwardedAttachments : []).map(a => ({
     ...a, sourceContext: 'current_message_forwarded'
   }));
 
-  // ── Stickers ───────────────────────────────────────────────────────────────
-  const currentStickers = message.stickers ? Array.from(message.stickers.values()) : [];
-  const allStickers     = [...currentStickers, ...forwardedStickers];
+  // Binary sticker/custom-emoji extraction is media analysis and therefore
+  // requires the same explicit per-user grant as ordinary file attachments.
   const stickerAttachments = [];
+  const emojiAttachments = [];
+  if (allowAttachments) {
+    const currentStickers = message.stickers ? Array.from(message.stickers.values()) : [];
+    const allStickers = [...currentStickers, ...forwardedStickers];
+    for (const sticker of allStickers) {
+      const attachment = await processStickerAsAttachment(sticker);
+      if (attachment) stickerAttachments.push(attachment);
+    }
 
-  for (const sticker of allStickers) {
-    const sa = await processStickerAsAttachment(sticker);
-    if (!sa) continue;
-    stickerAttachments.push(sa);
-    const type = sa.isAnimated ? 'Animated Sticker' : 'Sticker';
-    if (!messageContent.includes(sticker.name)) {
-      messageContent += `\n[${type}: ${sticker.name}]`;
+    const customEmojis = extractCustomEmojis(messageContent);
+    const limitedEmojis = customEmojis.slice(0, ATTACHMENT_LIMITS.MAX_EMOJIS);
+    const exceededEmojis = customEmojis.slice(ATTACHMENT_LIMITS.MAX_EMOJIS);
+    for (const emoji of limitedEmojis) {
+      const attachment = await processEmojiAsAttachment(emoji);
+      if (attachment) emojiAttachments.push(attachment);
+    }
+    for (const emoji of exceededEmojis) {
+      messageContent = messageContent.replace(emoji.fullMatch, `:${emoji.name}:`);
     }
   }
 
-  // ── Custom emojis ──────────────────────────────────────────────────────────
-  const customEmojis  = extractCustomEmojis(messageContent);
-  const limitedEmojis = customEmojis.slice(0, ATTACHMENT_LIMITS.MAX_EMOJIS);
-  const exceededEmojis = customEmojis.slice(ATTACHMENT_LIMITS.MAX_EMOJIS);
-
-  const emojiAttachments = [];
-  for (const emoji of limitedEmojis) {
-    const ea = await processEmojiAsAttachment(emoji);
-    if (ea) emojiAttachments.push(ea);
-  }
-  for (const emoji of exceededEmojis) {
-    messageContent = messageContent.replace(emoji.fullMatch, `:${emoji.name}:`);
-  }
-
   // ── Assemble final attachment list ─────────────────────────────────────────
-  const regularAttachments = Array.from(message.attachments.values())
-    .map(a => ({ ...a, sourceContext: 'current_message' }));
+  const regularAttachments = allowAttachments
+    ? Array.from(message.attachments.values()).map(a => ({ ...a, sourceContext: 'current_message' }))
+    : [];
 
   const allAttachments = [
     ...repliedAttachments,
@@ -388,7 +388,9 @@ export async function prepareMessageContent(message) {
     ...gifLinkAttachments
   ];
 
-  const { finalPrompt, summaryParts } = await extractFileText(message, messageContent);
+  const { finalPrompt, summaryParts } = allowAttachments
+    ? await extractFileText(message, messageContent)
+    : { finalPrompt: messageContent, summaryParts: [] };
 
   return {
     message,

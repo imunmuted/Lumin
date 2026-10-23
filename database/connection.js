@@ -8,12 +8,11 @@ import { MongoClient } from 'mongodb';
 import { Logger }      from '../core/Logger.js';
 import {
   DB_CONNECTION_CONFIG as CONNECTION_CONFIG,
-  DB_RETRY_CONFIG      as RETRY_CONFIG,
-  DB_VECTOR_SEARCH_CONFIG as VECTOR_SEARCH_CONFIG
+  DB_RETRY_CONFIG      as RETRY_CONFIG
 } from './config.js';
 
-// Re-export so existing importers (vectorSearch.js etc.) keep working without changes.
-export { CONNECTION_CONFIG, RETRY_CONFIG, VECTOR_SEARCH_CONFIG };
+// The active data layer deliberately exposes no vector-memory search configuration.
+export { CONNECTION_CONFIG, RETRY_CONFIG };
 
 const logger = Logger.get('Database');
 
@@ -128,7 +127,9 @@ export async function connectDB() {
     }
   }
 
-  const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017/gemini-discord-bot';
+  const configuredUri = process.env.MONGODB_URI;
+  const uri = configuredUri || (process.env.NODE_ENV === 'production' ? '' : 'mongodb://localhost:27017/gemini-discord-bot');
+  if (!uri) throw new Error('MONGODB_URI is required in production.');
   let lastError;
 
   for (let attempt = 1; attempt <= RETRY_CONFIG.MAX_ATTEMPTS; attempt++) {

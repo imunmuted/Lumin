@@ -49,7 +49,7 @@ const RATE_LIMIT_CONFIG = Object.freeze({
    * @type {Record<string, number>}
    */
   MODEL_REQUESTS_PER_MINUTE: {
-    'gemini-3.1-flash-lite': Infinity
+    'gemini-3.5-flash-lite': Infinity
   },
 
   /** Sliding-window duration in ms. */

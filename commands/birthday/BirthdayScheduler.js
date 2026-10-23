@@ -14,7 +14,7 @@ import { Logger }                         from '../../core/Logger.js';
 
 const logger = Logger.get('BirthdayScheduler');
 
-const BIRTHDAY_MODEL = MODELS['gemini-3.5-flash'];
+const BIRTHDAY_MODEL = MODELS['gemini-3.5-flash-lite'];
 const FALLBACK_MODEL     = DEFAULT_MODEL;
 const WISH_DELAY_MS      = 2000;
 const CHECK_INTERVAL_MS  = 60 * 60 * 1000;   // hourly

@@ -12,7 +12,7 @@ import { Logger }                         from '../../core/Logger.js';
 
 const logger = Logger.get('ComplimentHandler');
 
-const FUN_MODEL = MODELS['gemini-3.5-flash'];
+const FUN_MODEL = MODELS['gemini-3.5-flash-lite'];
 const FALLBACK_MODEL         = DEFAULT_MODEL;
 const MAX_COMPLIMENTS_PER_DAY = 15;
 const ONE_DAY                 = 86_400_000;

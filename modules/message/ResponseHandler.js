@@ -13,6 +13,7 @@ import {
   state,
   BOT_CONFIG,
   DEFAULT_USER_SETTINGS,
+  getDefaultUserSettings,
   TEMP_DIR,
   switchToNextKey,
   switchToNextKeyOrModel
@@ -25,7 +26,8 @@ import {
   consumePendingGif,     clearPendingGif,
   setLastBotMessage
 } from '../functions/pendingMedia.js';
-import { getGenerationConfig, RATE_LIMIT_ERRORS, MODEL_FALLBACK_CHAIN, isGemmaModel } from '../../modules/config.js';
+import { getGenerationConfig, getSafetySettings, RATE_LIMIT_ERRORS, MODEL_FALLBACK_CHAIN, isGemmaModel, getModelMetadata } from '../../modules/config.js';
+import { getRuntimeFeatureFlag } from '../../helium/runtimeRegistry.js';
 import { extractFileText }              from './PromptBuilder.js';
 import { processPromptAndMediaAttachments, classifyAttachments } from './MediaHandler.js';
 import { saveMessageHistory }           from './HistoryManager.js';
@@ -69,7 +71,7 @@ export function updateEmbed(
 ) {
   try {
     const embedColor      = effectiveSettings.embedColor || BOT_CONFIG.HEX_COLOUR;
-    const continuousReply = effectiveSettings.continuousReply ?? DEFAULT_USER_SETTINGS.continuousReply;
+    const continuousReply = effectiveSettings.continuousReply ?? getDefaultUserSettings().continuousReply;
     const showMetadata    = effectiveSettings.responseFormat === 'Embedded';
     const isGuild         = originalMessage.guild !== null;
 
@@ -403,8 +405,8 @@ export async function handleModelResponse(
   const guildId = originalMessage.guild?.id;
 
   const responseFormat    = effectiveSettings.responseFormat    || BOT_CONFIG.DEFAULT_RESPONSE_FORMAT;
-  const showActionButtons = effectiveSettings.showActionButtons ?? DEFAULT_USER_SETTINGS.showActionButtons;
-  const continuousReply   = effectiveSettings.continuousReply   ?? DEFAULT_USER_SETTINGS.continuousReply;
+  const showActionButtons = effectiveSettings.showActionButtons ?? getDefaultUserSettings().showActionButtons;
+  const continuousReply   = effectiveSettings.continuousReply   ?? getDefaultUserSettings().continuousReply;
   const maxCharLimit      = responseFormat === 'Embedded' ? CHARACTER_LIMITS.EMBEDDED : CHARACTER_LIMITS.NORMAL;
 
   let currentModelIndex = MODEL_FALLBACK_CHAIN.indexOf(modelName);
@@ -511,10 +513,12 @@ export async function handleModelResponse(
   // codeExecution) with functionDeclarations in a single request.
   // Older Gemini models throw 400 if you mix them — strip built-in tools.
   // Gemma models: googleSearch works, but urlContext/codeExecution do not.
-  const isGemini3 = (name) => /gemini-3/i.test(name);
+  const isModernGemini = (name) => /^gemini-(?:3|4)/i.test(name);
   const isGemma   = (name) => isGemmaModel(name);
+  const supportsTools = (name) => getModelMetadata(name)?.supportsTools === true;
+  const supportsBuiltInTools = (name) => getModelMetadata(name)?.supportsBuiltInTools === true;
 
-  // Strip google_search fn from non-Gemma: they have native googleSearch built-in.
+  // Gemini models with native Search should use that built-in instead of duplicate function routing.
   const stripGoogleSearchFn = (tools) =>
     tools.map(t => {
       if (!t.functionDeclarations) return t;
@@ -523,21 +527,33 @@ export async function handleModelResponse(
     }).filter(Boolean);
 
   const resolveTools = (allTools, name) => {
-    if (isGemma(name)) {
-      // Gemma: functionDeclarations only — no built-in server-side tools (causes 400).
-      // google_search IS included so Gemma can web-search via function calling.
-      return allTools.filter(t => t.functionDeclarations);
+    const allowWebSearch = getRuntimeFeatureFlag('ENABLE_WEB_SEARCH');
+    const allowFunctionCalling = getRuntimeFeatureFlag('ENABLE_FUNCTION_CALLING');
+    let selected = Array.isArray(allTools) ? [...allTools] : [];
+    if (!allowWebSearch) {
+      selected = selected.filter(tool => !Object.hasOwn(tool, 'googleSearch'));
+      selected = selected.map(tool => {
+        if (!Array.isArray(tool.functionDeclarations)) return tool;
+        const functionDeclarations = tool.functionDeclarations.filter(fn => fn.name !== 'google_search');
+        return functionDeclarations.length ? { ...tool, functionDeclarations } : null;
+      }).filter(Boolean);
     }
-    if (isGemini3(name)) {
-      // Gemini 3: all tools minus google_search fn declaration (native search handles it).
-      return stripGoogleSearchFn(allTools);
+    if (!allowFunctionCalling) selected = selected.filter(tool => !Array.isArray(tool.functionDeclarations));
+    if (!supportsTools(name)) return [];
+    if (!supportsBuiltInTools(name)) {
+      // Gemma supports custom function declarations but not this application's
+      // Gemini-hosted built-in tool bundle. Send only the custom function schema.
+      return selected.filter(tool => Array.isArray(tool.functionDeclarations));
     }
-    // Older Gemini: function declarations only, no google_search fn.
-    return stripGoogleSearchFn(allTools.filter(t => t.functionDeclarations));
+    if (isModernGemini(name)) {
+      return allowWebSearch ? stripGoogleSearchFn(selected) : selected;
+    }
+    // Older Gemini: function declarations only; built-in tools are unsupported.
+    return stripGoogleSearchFn(selected.filter(tool => tool.functionDeclarations));
   };
 
   const resolveToolConfig = (name) =>
-    isGemini3(name) && !isGemma(name) ? { includeServerSideToolInvocations: true } : undefined;
+    supportsBuiltInTools(name) && isModernGemini(name) ? { includeServerSideToolInvocations: true } : undefined;
 
   // ── Main retry loop ────────────────────────────────────────────────────────
 
@@ -564,9 +580,9 @@ export async function handleModelResponse(
             systemInstruction,
             ...(generationConfig || {}),
             tools: effectiveTools,
+            safetySettings: getSafetySettings(modelName),
             ...(effectiveToolCfg ? { toolConfig: effectiveToolCfg } : {})
-          },
-          safetySettings
+          }
         };
 
         const stream = await genAI.models.generateContentStream(request);
@@ -637,11 +653,11 @@ export async function handleModelResponse(
               break;
             }
 
-            // Gemini 3: pass thought_signature + id back exactly as received (required).
+            // Modern Gemini: pass thought_signature + id back exactly as received (required).
             // Gemma: no thought_signature ever — pass parts as-is.
             // Other Gemini (e.g. 3.5-flash): strip BOTH thought_signature AND id —
             //   sending either triggers "context circulation not enabled" 400 error.
-            const sanitizedFcParts = (isGemini3(modelName) && !isGemma(modelName))
+            const sanitizedFcParts = (isModernGemini(modelName) && !isGemma(modelName))
               ? functionCallParts
               : functionCallParts.map(({ thought_signature, thoughtSignature, id, ...rest }) => rest);
 
@@ -659,9 +675,9 @@ export async function handleModelResponse(
                 systemInstruction,
                 ...(generationConfig || {}),
                 tools: effectiveTools,
+                safetySettings: getSafetySettings(modelName),
                 ...(effectiveToolCfg ? { toolConfig: effectiveToolCfg } : {})
-              },
-              safetySettings
+              }
             };
 
             const nextStream = await genAI.models.generateContentStream(nextRequest);

@@ -23,7 +23,7 @@ import { PermissionsBitField } from 'discord.js';
 import axios                   from 'axios';
 import { getTextExtractor }    from 'office-text-extractor';
 
-import { state, client, DEFAULT_SERVER_SETTINGS } from './managers/BotManager.js';
+import { state, client, DEFAULT_SERVER_SETTINGS, getDefaultServerSettings } from './managers/BotManager.js';
 import { replaceAllMentions }                      from './modules/shared/discordHelpers.js';
 import { Logger }                                  from './core/Logger.js';
 import {
@@ -122,7 +122,7 @@ export function initializeBlacklistForGuild(guildId) {
     if (!state.blacklistedUsers[guildId]) state.blacklistedUsers[guildId] = [];
 
     if (!state.serverSettings[guildId]) {
-      state.serverSettings[guildId] = { ...DEFAULT_SERVER_SETTINGS };
+      state.serverSettings[guildId] = getDefaultServerSettings();
     } else {
       state.serverSettings[guildId] = ensureServerSettingsComplete(state.serverSettings[guildId]);
     }

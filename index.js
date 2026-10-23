@@ -27,6 +27,7 @@ import {
   initializeBlacklistForGuild,
   BOT_CONFIG,
   DEFAULT_USER_SETTINGS,
+  getDefaultUserSettings,
   requestQueues,   // ← direct import; avoids going through state getter
   getDailyMessageStats,
 } from './managers/BotManager.js';
@@ -52,8 +53,6 @@ import {
   processMessageRoulette
 } from './commands/index.js';
 import { MAX_QUEUE_DEPTH_PER_USER, RAM_MEDIA_SUSPEND_THRESHOLD_MB } from './modules/config.js';
-import { scheduleDailyDigestJob } from './commands/summary/SessionSummaryJob.js';
-import { WEEKLY_SUMMARY_ENABLED }    from './modules/config.js';
 
 const logger = Logger.get('Index');
 
@@ -195,13 +194,7 @@ client.once('clientReady', async () => {
     logger.error('Error initializing scheduled tasks', error);
   }
 
-  // Weekly user context summary job — fires every Sunday at 02:00 UTC
-  try {
-    scheduleDailyDigestJob();
-    logger.info('Daily session digest job scheduled');
-  } catch (error) {
-    logger.error('Failed to schedule daily digest job', error);
-  }
+  // Autonomous memory summary jobs are intentionally disabled in Helium v4.
 
   // ── Periodic GC nudge ─────────────────────────────────────────────────
   // --expose-gc is already in package.json. Fires every 30 min but only
@@ -265,7 +258,7 @@ client.on('messageCreate', async (message) => {
     const userSettings      = state.userSettings[userId]    || {};
     const serverSettings    = guildId ? (state.serverSettings[guildId] || {}) : {};
     const effectiveSettings = serverSettings.overrideUserSettings ? serverSettings : userSettings;
-    const continuousReply   = effectiveSettings.continuousReply ?? DEFAULT_USER_SETTINGS.continuousReply;
+    const continuousReply   = effectiveSettings.continuousReply ?? getDefaultUserSettings().continuousReply;
     const channelContinuous = state.continuousReplyChannels?.[channelId] || false;
 
     const shouldRespond = (

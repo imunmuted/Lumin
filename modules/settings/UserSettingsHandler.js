@@ -18,7 +18,7 @@ import fs   from 'fs/promises';
 
 import {
   state, getHistory, TEMP_DIR, BOT_CONFIG,
-  DEFAULT_USER_SETTINGS
+  DEFAULT_USER_SETTINGS, getDefaultUserSettings
 } from '../../managers/BotManager.js';
 import * as db     from '../../database.js';
 import { Logger }  from '../../core/Logger.js';
@@ -234,8 +234,8 @@ export async function showUserSettings(interaction, isUpdate = false) {
     }
   }
 
-  const responseFormat    = userSettings.responseFormat   || DEFAULT_USER_SETTINGS.responseFormat || 'Normal';
-  const showActionButtons = userSettings.showActionButtons ?? DEFAULT_USER_SETTINGS.showActionButtons ?? true;
+  const responseFormat    = userSettings.responseFormat   || getDefaultUserSettings().responseFormat || 'Normal';
+  const showActionButtons = userSettings.showActionButtons ?? getDefaultUserSettings().showActionButtons ?? true;
 
   const container = buildContainer(
     [

@@ -2,10 +2,9 @@
  * @fileoverview /digest command — generate an AI-powered weekly conversation summary.
  *
  * Strategy:
- *   1. Try vector-search selection via memory embeddings (top ~100 relevant messages).
- *   2. Fall back to raw chronological history slice if not enough vectors exist.
- *   3. Upload the conversation to Gemini Files API, then generate summary.
- *   4. On key-rotation PERMISSION_DENIED, re-upload and retry.
+ *   1. Select up to 100 recent text messages from the previous seven days.
+ *   2. Upload bounded text to Gemini Files API, then generate a summary.
+ *   3. On key-rotation PERMISSION_DENIED, re-upload and retry.
  *
  * @module commands/fun/DigestHandler
  */
@@ -20,14 +19,13 @@ import path              from 'path';
 import fs                from 'fs/promises';
 
 import { state, saveStateToFile, genAI, TEMP_DIR } from '../../managers/BotManager.js';
-import { embeddingService }                         from '../../memory/EmbeddingService.js';
 import * as db                                      from '../../database/index.js';
-import { RATE_LIMIT_ERRORS, MODELS, DEFAULT_MODEL } from '../../modules/config.js';
+import { RATE_LIMIT_ERRORS, MODELS, DEFAULT_MODEL, getSafetySettings } from '../../modules/config.js';
 import { Logger }                                   from '../../core/Logger.js';
 
 const logger = Logger.get('DigestHandler');
 
-const FUN_MODEL = MODELS['gemini-3.5-flash'];
+const FUN_MODEL = MODELS['gemini-3.8-flash'];
 const FALLBACK_MODEL = DEFAULT_MODEL;
 
 const COOLDOWN_DAYS          = 7;
@@ -112,57 +110,26 @@ export async function handleDigestCommand(interaction) {
     const sevenDaysAgo = now - DAYS_TO_ANALYZE * 86_400_000;
     let selectedMessages = [];
 
-    // --- 1. Vector search selection ---
-    const memoryEntries  = await db.getMemoryEntries(historyId, 1000);
-    const relevantEntries = memoryEntries.filter(e => e.timestamp > sevenDaysAgo && e.embedding);
-
-    if (relevantEntries.length > 0) {
-      try {
-        const query          = 'Key events, important decisions, funny moments, and meaningful conversations from the week.';
-        const queryEmbedding = await embeddingService.generateEmbedding(query, 'RETRIEVAL_QUERY');
-
-        if (queryEmbedding) {
-          const scored = relevantEntries
-            .map(e => ({ ...e, similarity: embeddingService.cosineSimilarity(queryEmbedding, e.embedding) }))
-            .sort((a, b) => b.similarity - a.similarity);
-
-          let count = 0;
-          for (const entry of scored) {
-            if (count >= TARGET_TOTAL_MESSAGES) break;
-            if (Array.isArray(entry.messages)) {
-              selectedMessages.push(...entry.messages);
-              count += entry.messages.length;
-            }
-          }
-        }
-      } catch (err) {
-        logger.error('Vector search failed for digest, falling back to raw history', err);
+    // Select recent persisted text history directly. Helium no longer writes
+    // embeddings or queries the legacy vector-memory collection for this feature.
+    const persistedHistory = await db.getChatHistory(historyId).catch(() => null);
+    const currentHistory = state.chatHistories?.[historyId];
+    const historyObject = currentHistory && Object.keys(currentHistory).length ? currentHistory : (persistedHistory || {});
+    const allRaw = [];
+    for (const messages of Object.values(historyObject)) {
+      if (!Array.isArray(messages)) continue;
+      for (const msg of messages) {
+        const timestamp = Number(msg.timestamp || 0);
+        if (!timestamp || timestamp < sevenDaysAgo) continue;
+        const content = typeof msg.content === 'string' ? msg.content :
+          Array.isArray(msg.content) ? msg.content.map(part => typeof part?.text === 'string' ? part.text : '').filter(Boolean).join(' ') :
+          Array.isArray(msg.parts) ? msg.parts.map(part => typeof part?.text === 'string' ? part.text : '').filter(Boolean).join(' ') : '';
+        const text = content.trim();
+        if (text) allRaw.push({ ...msg, text, timestamp });
       }
     }
-
-    // --- 2. Raw history fallback ---
-    if (selectedMessages.length < 10) {
-      const historyObject = state.chatHistories?.[historyId] ?? {};
-      const allRaw = [];
-
-      for (const messages of Object.values(historyObject)) {
-        if (!Array.isArray(messages)) continue;
-        for (const msg of messages) {
-          if (msg.timestamp && msg.timestamp > sevenDaysAgo) {
-            const text = msg.content?.map(c => c.text).filter(Boolean).join(' ') ?? '';
-            if (text.trim()) allRaw.push({ ...msg, text });
-          }
-        }
-      }
-
-      allRaw.sort((a, b) => a.timestamp - b.timestamp);
-      selectedMessages = allRaw.slice(-TARGET_TOTAL_MESSAGES);
-    } else {
-      selectedMessages.sort((a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0));
-      if (selectedMessages.length > TARGET_TOTAL_MESSAGES + 25) {
-        selectedMessages = selectedMessages.slice(0, TARGET_TOTAL_MESSAGES + 25);
-      }
-    }
+    allRaw.sort((a, b) => a.timestamp - b.timestamp);
+    selectedMessages = allRaw.slice(-TARGET_TOTAL_MESSAGES);
 
     if (selectedMessages.length === 0) {
       const container = new ContainerBuilder().setAccentColor(ACCENT_COLOR);
@@ -263,7 +230,8 @@ export async function handleDigestCommand(interaction) {
           parts: [{ text: 'You are a conversation analyst creating executive summaries. Be concise, specific, and highlight actionable insights. Use bullet points and clear structure.' }]
         },
         temperature:     0.3,
-        maxOutputTokens: 1000
+        maxOutputTokens: 1000,
+        safetySettings: getSafetySettings(model)
       }
     });
 

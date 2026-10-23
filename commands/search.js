@@ -22,7 +22,7 @@ import {
   state,
   requestQueues,          // FIX: direct import — avoids state.requestQueues stale-reference bug
   BOT_CONFIG,
-  DEFAULT_USER_SETTINGS
+  DEFAULT_USER_SETTINGS, getDefaultUserSettings
 } from '../managers/BotManager.js';
 import { getCurrentClient } from '../managers/ApiKeyManager.js';
 import { Logger }            from '../core/Logger.js';
@@ -33,7 +33,7 @@ import { writeTempFile, safeUnlink } from '../modules/shared/tempFileManager.js'
 import { initializeBlacklistForGuild } from '../utils.js';
 import { processAttachment } from '../modules/attachments/FileUploader.js';
 import { processUserQueue }  from '../modules/message/MessageProcessor.js';
-import { MODELS, safetySettings, getGenerationConfig, RATE_LIMIT_ERRORS, DEFAULT_MODEL, GEMMA_DEFAULT_MODEL, GEMMA_SUPPORTED_MIME_PREFIXES, GEMMA_SUPPORTED_EXTENSIONS, isGemmaModel } from '../modules/config.js';
+import { MODELS, getSafetySettings, getGenerationConfig, RATE_LIMIT_ERRORS, DEFAULT_MODEL, GEMMA_DEFAULT_MODEL, GEMMA_SUPPORTED_MIME_PREFIXES, GEMMA_SUPPORTED_EXTENSIONS, isGemmaModel } from '../modules/config.js';
 import config                from '../config.js';
 
 const logger = Logger.get('SearchCommand');
@@ -322,14 +322,14 @@ async function sendSearchResponse(
  *   The genAI proxy wraps every call in ApiKeyManager.withRetryPerModel, which
  *   uses the global MODEL_FALLBACK_CHAIN for internal model switching.  When
  *   ENABLE_GEMMA=true that chain is replaced with Gemma-only models, so a rate
- *   limit on gemini-3.1-flash-lite causes withRetryPerModel to jump
+ *   limit on the active Gemini model causes withRetryPerModel to jump
  *   straight to Gemma — silently skipping gemini-3.5-flash — before the
  *   searchFallbackChain loop in executeSearchInteraction ever sees the error.
  *
  *   By calling getCurrentClient() directly, rate-limit errors propagate as real
  *   throws.  executeWithRetry re-throws them to the outer for-loop, which then
  *   steps correctly through:
- *     gemini-3.1-flash-lite → gemini-3.5-flash → gemma-4-26b-a4b-it
+ *     gemini-3.5-flash-lite → gemini-3.8-flash → gemma-4-26b-a4b-it
  *
  *   sanitizeRequestForModel is called explicitly here to strip tools that the
  *   target model doesn't support (e.g. urlContext / codeExecution for Gemma).
@@ -348,8 +348,7 @@ async function runSearchGeneration(modelName, generationConfig, tools, parts) {
   const request = {
     model:    modelName,
     contents: [{ role: 'user', parts }],
-    config:   { systemInstruction: buildSearchSystemPrompt(), ...generationConfig, tools },
-    safetySettings
+    config:   { systemInstruction: buildSearchSystemPrompt(), ...generationConfig, tools, safetySettings: getSafetySettings(modelName) }
   };
 
   // Strip tools incompatible with this specific model (e.g. urlContext + codeExecution for Gemma)
@@ -545,14 +544,14 @@ export async function executeSearchInteraction(interaction) {
     const serverSettings = guildId ? (state.serverSettings[guildId] || {}) : {};
     const effective      = serverSettings.overrideUserSettings ? serverSettings : userSettings;
 
-    const showActionButtons = effective.showActionButtons ?? DEFAULT_USER_SETTINGS.showActionButtons;
+    const showActionButtons = effective.showActionButtons ?? getDefaultUserSettings().showActionButtons;
     const responseFormat    = effective.responseFormat || BOT_CONFIG.DEFAULT_RESPONSE_FORMAT;
     const embedColor        = effective.embedColor     || BOT_CONFIG.HEX_COLOUR;
 
     // ── Search fallback chain ──────────────────────────────────────────────
     // Three-model chain for /search — always tried in this order:
-    //   1. gemini-3.1-flash-lite  (primary — fastest / cheapest Gemini 3)
-    //   2. gemini-3.5-flash       (mid-tier — more capable, higher quota limit)
+    //   1. gemini-3.5-flash-lite  (primary — cost-efficient current Gemini 3)
+    //   2. gemini-3.8-flash       (fallback — higher capability)
     //   3. gemma-4-26b-a4b-it     (last resort — Gemma 4 supports googleSearch
     //                              grounding via the Gemini API; not gated by
     //                              ENABLE_GEMMA for /search purposes)
@@ -560,8 +559,8 @@ export async function executeSearchInteraction(interaction) {
     // ENABLE_GEMMA flag is intentionally ignored here — /search always
     // falls back through the full chain regardless of global chat routing.
     const searchFallbackChain = [
-      MODELS['gemini-3.1-flash-lite'] ?? 'gemini-3.1-flash-lite',
-      MODELS['gemini-3.5-flash']      ?? 'gemini-3.5-flash',
+      MODELS['gemini-3.5-flash-lite'] ?? 'gemini-3.5-flash-lite',
+      MODELS['gemini-3.8-flash']      ?? 'gemini-3.8-flash',
       MODELS[GEMMA_DEFAULT_MODEL]     ?? 'gemma-4-26b-a4b-it',
     ];
 

@@ -1,0 +1,708 @@
+{
+  "name": "Helium Console API",
+  "basePath": "/dashboard",
+  "manifestVersion": 1,
+  "notes": [
+    "Generated from Express route declarations. Authorization middleware is centralized in dashboard/server.js but individual permission policy must remain tested.",
+    "This is a declaration inventory, not proof that a route is operationally complete or safe without integration tests."
+  ],
+  "routeCount": 116,
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/api/ai/config",
+      "category": "ai-configuration",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/ai/config/prompts",
+      "category": "ai-configuration",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/ai/config/safety",
+      "category": "ai-configuration",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/audit/logs",
+      "category": "authorization",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/permissions",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/cmd/all-histories",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/cmd/announce",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/cmd/announce-users",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/cmd/api-key-stats",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/cmd/attachment-grants/:userId",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/cmd/attachment-grants/:userId",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/cmd/ban-member",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/cmd/birthdays",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/cmd/blacklist",
+      "category": "user-management",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/cmd/blacklisted-users",
+      "category": "user-management",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/cmd/bot-config",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/cmd/bot-config",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/cmd/bot-info",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/cmd/channels/:guildId",
+      "category": "guild-management",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/cmd/chat-history/:id",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/cmd/clear-all-usage",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/cmd/clear-birthdays",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/cmd/clear-compliment-usage",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/cmd/clear-history",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/cmd/clear-image-usage",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/cmd/clear-quote-usage",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/cmd/clear-reminders",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/cmd/clear-starter-usage",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/cmd/clear-summary-usage",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/cmd/command-catalog",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/cmd/dm-all-owners",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/cmd/feature-flags",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/cmd/get-presence",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/cmd/guild-info/:guildId",
+      "category": "guild-management",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/cmd/invite-link",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/cmd/kick-member",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/cmd/leave-server",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/cmd/lockdown",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/cmd/members/:guildId",
+      "category": "guild-management",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/cmd/memory/:userId",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/cmd/memory/:userId",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/cmd/migrate",
+      "category": "migrations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/cmd/migrate/fields",
+      "category": "migrations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/cmd/migrate/servers",
+      "category": "migrations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/cmd/migrate/users",
+      "category": "migrations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/cmd/migration-config",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/cmd/migration-config",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/cmd/models",
+      "category": "ai-configuration",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/cmd/purge-blacklist",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/cmd/reload-commands",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/cmd/reload-state",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/cmd/reminders",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/cmd/reset-server",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/cmd/reset-user-settings",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/cmd/resolve-username",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/cmd/restart",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/cmd/save-state",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/cmd/send-channel",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/cmd/send-dm",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/cmd/server-settings/:guildId",
+      "category": "guild-management",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/cmd/server-settings/:guildId",
+      "category": "guild-management",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/cmd/servers",
+      "category": "guild-management",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/cmd/set-embed-color",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/cmd/set-model",
+      "category": "ai-configuration",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/cmd/set-nickname",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/cmd/set-presence",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/cmd/state-snapshot",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/cmd/switch-api-key",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/cmd/switch-to-key/:index",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/cmd/toggle-debug",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/cmd/toggle-feature",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/cmd/unblacklist",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/cmd/usage-stats",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/cmd/user-profile/:userId",
+      "category": "user-management",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/cmd/user-settings/:userId",
+      "category": "user-management",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/cmd/user-settings/:userId",
+      "category": "user-management",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/config/activities",
+      "category": "configuration",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/config/all",
+      "category": "configuration",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/config/base",
+      "category": "configuration",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/config/base",
+      "category": "configuration",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/config/base/reset",
+      "category": "configuration",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/config/modules",
+      "category": "configuration",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/config/modules",
+      "category": "configuration",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/config/modules/reset",
+      "category": "configuration",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/config/rate-limits",
+      "category": "configuration",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/config/rate-limits",
+      "category": "configuration",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/config/runtime",
+      "category": "configuration",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/config/runtime",
+      "category": "configuration",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/config/runtime",
+      "category": "configuration",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/db/collection/:name",
+      "category": "data-and-files",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/db/collection/:name/:id",
+      "category": "data-and-files",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/db/collection/:name/:id",
+      "category": "data-and-files",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/db/collections",
+      "category": "data-and-files",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/files",
+      "category": "data-and-files",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/files",
+      "category": "data-and-files",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/files",
+      "category": "data-and-files",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/migrations",
+      "category": "migrations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/migrations",
+      "category": "migrations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/migrations/:migrationId",
+      "category": "migrations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/migrations/:migrationId/rollback",
+      "category": "migrations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/migrations/fields",
+      "category": "migrations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/migrations/preview",
+      "category": "migrations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/security/roles",
+      "category": "authorization",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/security/roles",
+      "category": "authorization",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/security/roles",
+      "category": "authorization",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/settings/defaults",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/settings/defaults",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/stats",
+      "category": "bot-operations",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/auth/config",
+      "category": "authentication",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/auth/discord",
+      "category": "authentication",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/auth/discord/callback",
+      "category": "authentication",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/auth/google",
+      "category": "authentication",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/auth/google/callback",
+      "category": "authentication",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "POST",
+      "path": "/auth/logout",
+      "category": "authentication",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/auth/me",
+      "category": "authentication",
+      "definedIn": "dashboard/server.js"
+    },
+    {
+      "method": "POST",
+      "path": "/auth/verify-recaptcha",
+      "category": "authentication",
+      "definedIn": "dashboard/server.js"
+    }
+  ]
+}

@@ -68,6 +68,10 @@ import {
   runMigrations,
   DEFAULT_SERVER_SETTINGS,
   DEFAULT_USER_SETTINGS,
+  getDefaultServerSettings,
+  getDefaultUserSettings,
+  getSettingDefaults,
+  saveSettingDefaultsToDB,
 } from './StateManager.js';
 import { RESOURCE_CONFIG, BOT_CONFIG, POLL_CONFIG, MIGRATION_CONFIG } from './config.js';
 
@@ -186,7 +190,7 @@ export const client = new Client({
  * Called inside the proxy callback every time ApiKeyManager picks a model.
  * Without this, toolConfig.includeServerSideToolInvocations and built-in tools
  * (urlContext, codeExecution) stay in the request after a fallback, causing
- * 400 INVALID_ARGUMENT on gemini-3.5-flash — retried 90× burning all quota.
+ * 400 INVALID_ARGUMENT on a fallback model with incompatible tools — retried repeatedly and burned quota.
  *
  * @param {object} request - Mutated in place.
  * @param {string} modelName - The model ApiKeyManager is about to call.
@@ -328,7 +332,7 @@ export async function initialize() {
   await loadStateFromDB(TEMP_DIR);
   logger.info('State loaded');
 
-  // 3. Redis cache (optional — no-ops if REDIS_URL not set)
+  // 3. Minimal history facade (no vector indexing; does not connect to Redis)
   await memorySystem.init();
   logger.info('Memory system initialized');
 
@@ -394,10 +398,10 @@ async function gracefulShutdown(signal) {
     await db.closeDB();
     logger.info('Database connection closed');
 
-    logger.info('Closing Redis connection…');
-    const { redisCache } = await import('../memory/RedisCache.js');
-    await redisCache.disconnect();
-    logger.info('Redis disconnected');
+    logger.info('Closing optional distributed rate-limit store…');
+    const { redisStore } = await import('../infra/RedisStore.js');
+    await redisStore.disconnect();
+    logger.info('Optional distributed rate-limit store disconnected');
 
     const shutdownStats = getApiKeyStats();
     logger.info(
@@ -454,6 +458,10 @@ export {
   BOT_CONFIG,
   DEFAULT_SERVER_SETTINGS,
   DEFAULT_USER_SETTINGS,
+  getDefaultServerSettings,
+  getDefaultUserSettings,
+  getSettingDefaults,
+  saveSettingDefaultsToDB,
   POLL_CONFIG,
   MIGRATION_CONFIG
 };
@@ -484,6 +492,10 @@ export default {
   BOT_CONFIG,
   DEFAULT_SERVER_SETTINGS,
   DEFAULT_USER_SETTINGS,
+  getDefaultServerSettings,
+  getDefaultUserSettings,
+  getSettingDefaults,
+  saveSettingDefaultsToDB,
   POLL_CONFIG,
   MIGRATION_CONFIG
 };

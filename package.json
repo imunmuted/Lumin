@@ -1,24 +1,28 @@
 {
-  "name": "lumin",
-  "version": "3.1.0",
-  "description": "Lumin — Gemini-powered multimodal Discord bot",
+  "name": "helium-discord-bot",
+  "version": "4.0.0",
+  "description": "Helium Discord bot backend (default bot display name: Lumin)",
   "main": "index.js",
   "type": "module",
   "scripts": {
     "start": "node --max-old-space-size=512 --expose-gc index.js",
-    "dev": "node --max-old-space-size=512 --expose-gc --watch index.js"
+    "dev": "node --max-old-space-size=512 --expose-gc --watch index.js",
+    "check": "node scripts/check-imports.js && node scripts/check-syntax.js",
+    "test": "node --test tests/*.test.js"
   },
   "keywords": [
     "discord",
     "bot",
+    "google-genai",
     "gemini",
-    "ai",
-    "multimodal"
+    "helium",
+    "api-first",
+    "security"
   ],
-  "author": "unmuted",
+  "author": "Helium contributors",
   "license": "MIT",
   "dependencies": {
-    "@google/genai": "^1.48.0",
+    "@google/genai": "^2.30.0",
     "axios": "^1.16.1",
     "discord.js": "^14.26.4",
     "dotenv": "^16.5.0",
