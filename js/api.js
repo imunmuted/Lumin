@@ -1,13 +1,19 @@
-import { getToken, BASE_URL } from './config.js';
+import { BASE_URL } from './config.js';
+
+let csrfToken = null;
 
 async function req(method, path, body) {
   // Fix #1/#10: Cookie is sent automatically; no token header needed
-  const opts = { method, headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin' };
+  const headers = { 'Content-Type': 'application/json' };
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(method.toUpperCase()) && csrfToken) headers['X-CSRF-Token'] = csrfToken;
+  const opts = { method, headers, credentials: 'include' };
   if (body !== undefined) opts.body = JSON.stringify(body);
   const res  = await fetch(`${BASE_URL}${path}`, opts);
   let data;
   try { data = await res.json(); } catch { data = { error: `HTTP ${res.status}` }; }
   if (res.status === 401) data._authError = true;
+  if (path === '/auth/me' && typeof data.csrfToken === 'string') csrfToken = data.csrfToken;
+  if (path === '/auth/logout' && res.ok) csrfToken = null;
   return data;
 }
 
@@ -18,6 +24,8 @@ const del  = (p, b)  => req('DELETE', p, b);
 
 export const api = {
   getStats:            ()              => get('/api/stats'),
+  getCommandCatalog:   ()              => get('/api/cmd/command-catalog'),
+  getAuditLogs:        (params={})     => get(`/api/audit/logs?${new URLSearchParams(params)}`),
   getServers:          ()              => get('/api/cmd/servers'),
   saveState:           ()              => post('/api/cmd/save-state'),
   reloadState:         ()              => post('/api/cmd/reload-state'),
@@ -98,7 +106,7 @@ export const api = {
   authMe:              ()              => get('/auth/me'),
   authLogout:          ()              => post('/auth/logout'),
   authConfig:          ()              => get('/auth/config'),
-  verifyRecaptcha:     (token)         => post('/auth/verify-recaptcha', {token}),
+  verifyRecaptcha:     (token, provider) => post('/auth/verify-recaptcha', {token, provider}),
   getMigrationConfig:  ()              => get('/api/cmd/migration-config'),
   setMigrationConfig:  (data)          => put('/api/cmd/migration-config', data),
   getBotConfig:        ()              => get('/api/cmd/bot-config'),

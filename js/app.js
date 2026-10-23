@@ -1,4 +1,4 @@
-import { getToken, setToken, clearToken, hasToken, BASE_URL } from './config.js';
+import { getToken, setToken, clearToken, hasToken, BASE_URL, getApiWebSocketUrl } from './config.js';
 import { buildSidebarNav, buildBottomNav, navigate, onNavigate, setLockdownIndicator } from './router.js';
 import { renderCommands, renderApiKeysPanel } from './commands.js';
 import { initNodeTerminal, initMongoTerminal, initShellTerminal } from './terminals.js';
@@ -23,9 +23,8 @@ function startClock() {
 let statsWs=null;
 function startStatsStream() {
   if (statsWs && statsWs.readyState < 2) return;
-  const proto=location.protocol==='https:'?'wss':'ws';
-  // Fix #3: No token in WS URL — cookie is sent automatically on the upgrade request
-  statsWs=new WebSocket(`${proto}://${location.host}/dashboard/ws/stats`);
+  // API base and cookie authentication are shared with normal requests.
+  statsWs=new WebSocket(getApiWebSocketUrl('/ws/stats')); // No session token in URL.
   statsWs.onmessage=e=>{try{const d=JSON.parse(e.data);if(d.type==='stats')updateStats(d.data);}catch{}};
   statsWs.onclose=()=>setTimeout(startStatsStream,3000);
   statsWs.onerror=()=>statsWs?.close();
@@ -93,7 +92,34 @@ async function loadCurrentPresence() {
 }
 
 // ── Login flow ────────────────────────────────────────────────────────────
-window._initiateLogin = () => { location.href = `${BASE_URL}/auth/google`; };
+async function initiateOAuth(provider) {
+  const route = provider === 'discord' ? '/auth/discord' : '/auth/google';
+  try {
+    const config = await api.authConfig();
+    if (config?.recaptchaRequired) {
+      if (!config.recaptchaSiteKey) throw new Error('CAPTCHA is required but not configured. Contact the service owner.');
+      if (!window.grecaptcha) {
+        await new Promise((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = `https://www.google.com/recaptcha/api.js?render=${encodeURIComponent(config.recaptchaSiteKey)}`;
+          script.async = true;
+          script.onload = resolve;
+          script.onerror = () => reject(new Error('CAPTCHA could not be loaded. Check your network and try again.'));
+          document.head.appendChild(script);
+        });
+      }
+      await new Promise((resolve) => window.grecaptcha.ready(resolve));
+      const token = await window.grecaptcha.execute(config.recaptchaSiteKey, { action: 'login' });
+      const verified = await api.verifyRecaptcha(token, provider);
+      if (!verified?.success) throw new Error(verified?.error || 'CAPTCHA verification failed. Please try again.');
+    }
+    location.href = `${BASE_URL}${route}`;
+  } catch (error) {
+    showLogin(error?.message || 'Unable to begin sign-in. Please try again.');
+  }
+}
+window._initiateLogin = () => { void initiateOAuth('google'); };
+window._initiateDiscordLogin = () => { void initiateOAuth('discord'); };
 
 function showLogin(msg, type='err') {
   const a=el('login-alert'); if(!a) return;
@@ -107,6 +133,7 @@ async function initAuth() {
   if(authErr==='denied'){showLogin('Access denied. Only the authorized account may log in.');return;}
   if(authErr==='error'){showLogin('Authentication error. Please try again.');return;}
   if(authErr==='invalid_state'){showLogin('Session expired during login. Please try again.');return;}
+  if(authErr==='captcha_required'){showLogin('Complete the CAPTCHA check before signing in, then try again.');return;}
 
   // Fix #1/#10: No token in URL and no sessionStorage — auth is cookie-only.
   // Fix #1/#10: Cookie-only auth — skip the local token gate and always verify via /auth/me.
@@ -116,6 +143,13 @@ async function initAuth() {
     clearToken();
     el('login-page')?.classList.remove('hidden');
     el('app')?.classList.add('hidden');
+    const providers = await api.authConfig().catch(() => null);
+    const google = el('google-btn'); const discord = el('discord-btn');
+    if (google) google.classList.toggle('hidden', providers?.hasGoogleOAuth !== true);
+    if (discord) discord.classList.toggle('hidden', providers?.hasDiscordOAuth !== true);
+    if (providers && !providers.hasGoogleOAuth && !providers.hasDiscordOAuth) {
+      showLogin('Console authentication is not configured. Contact the service owner.');
+    }
     return;
   }
 
@@ -379,10 +413,8 @@ async function loadModels() {
   const ff=await api.getFeatureFlags().catch(()=>null);
   if(ff?.success){
     const flags=ff.data||{};
-    ['ENABLE_GEMMA','CACHE_ENABLED','PDF_ENABLED_FOR_GEMINI','CYCLE_GEMMA_WITH_GEMINI','WEEKLY_SUMMARY_ENABLED'].forEach((f,i)=>{
-      const sel=el(['ff-gemma','ff-cache','ff-pdf','ff-cycle','ff-weekly'][i]);
-      if(sel) sel.value=String(flags[f]??(f==='WEEKLY_SUMMARY_ENABLED'?true:false));
-    });
+    const pdf=el('ff-pdf');
+    if(pdf) pdf.value=String(flags.PDF_ENABLED_FOR_GEMINI ?? false);
   }
   // Load migration config
   const mc=await api.getMigrationConfig().catch(()=>null);
@@ -728,18 +760,13 @@ window._copyInvite=async()=>{
 
 
 // ── Feature flags (models page selects) ─────────────────────────────────────
-// Load all flags including new media + RAG flags
+// Load centrally registered runtime flags (memory/RAG controls are intentionally absent)
 async function loadAllFeatureFlags() {
   const ff = await api.getFeatureFlags().catch(() => null);
   if (!ff?.success) return;
   const flags = ff.data || {};
   const map = {
-    'ENABLE_GEMMA':            'ff-gemma',
-    'CACHE_ENABLED':           'ff-cache',
     'PDF_ENABLED_FOR_GEMINI':  'ff-pdf',
-    'CYCLE_GEMMA_WITH_GEMINI': 'ff-cycle',
-    'WEEKLY_SUMMARY_ENABLED':  'ff-weekly',
-    'ENABLE_RAG':              'ff-rag',
     'ENABLE_IMAGE_PROCESSING': 'ff-image',
     'ENABLE_VIDEO_PROCESSING': 'ff-video',
     'ENABLE_AUDIO_PROCESSING': 'ff-audio',
@@ -750,7 +777,7 @@ async function loadAllFeatureFlags() {
   };
   for (const [flag, elId] of Object.entries(map)) {
     const sel = el(elId);
-    if (sel) sel.value = String(flags[flag] ?? (flag === 'WEEKLY_SUMMARY_ENABLED' || flag === 'ENABLE_IMAGE_PROCESSING' || flag === 'ENABLE_WEB_SEARCH' || flag === 'ENABLE_FUNCTION_CALLING' ? true : false));
+    if (sel) sel.value = String(flags[flag] ?? (flag === 'ENABLE_IMAGE_PROCESSING' || flag === 'ENABLE_VIDEO_PROCESSING' || flag === 'ENABLE_AUDIO_PROCESSING' || flag === 'ENABLE_WEB_SEARCH' || flag === 'ENABLE_FUNCTION_CALLING' ? true : false));
   }
 }
 

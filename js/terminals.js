@@ -1,4 +1,4 @@
-import { getToken } from './config.js';
+import { getToken, getApiWebSocketUrl } from './config.js';
 
 const THEME = {
   background:'#050508', foreground:'#E4E4F0', cursor:'#8B77FF', cursorAccent:'#050508',
@@ -23,8 +23,8 @@ const T = {
   shell: {term:null,ws:null,addon:null,ready:false,dispose:null},
 };
 
-// Fix #3: No token in WS URL — auth is via HttpOnly cookie on the upgrade request
-const wsUrl = path => `${location.protocol==='https:'?'wss':'ws'}://${location.host}/dashboard${path}`;
+// Session authentication is cookie-only. Base URL supports separate console/API deployments.
+const wsUrl = path => getApiWebSocketUrl(path);
 
 function setConn(key, state) {
   const badge = document.getElementById(`${key}-badge`);

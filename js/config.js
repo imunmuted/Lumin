@@ -1,6 +1,15 @@
 // Fix #10: sessionStorage token storage removed — auth is now cookie-only.
 // Token is carried via HttpOnly lumin_session cookie; /auth/me verifies the session.
-export const BASE_URL = window.location.origin + '/dashboard';
+export const BASE_URL = String(window.HELIUM_API_BASE_URL || (window.location.origin + '/dashboard')).replace(/\/$/, '');
+
+/** Build a WebSocket URL against the configured API origin for a split frontend/backend deployment. */
+export function getApiWebSocketUrl(route) {
+  const base = new URL(BASE_URL, window.location.origin);
+  const prefix = base.pathname.replace(/\/$/, '');
+  const suffix = String(route || '').startsWith('/') ? String(route) : `/${route}`;
+  const protocol = base.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${protocol}//${base.host}${prefix}${suffix}`;
+}
 
 // Kept for any legacy callers during transition — return empty string; server uses cookie.
 export const getToken   = () => '';
